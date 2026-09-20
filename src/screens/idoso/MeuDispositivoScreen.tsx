@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -7,6 +8,7 @@ import { colors, fonts, radii } from '../../theme/theme';
 import BackHeader from '../../components/BackHeader';
 import Card from '../../components/Card';
 import AppButton from '../../components/AppButton';
+import { useDeviceStore } from '../../store/deviceStore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MeuDispositivo'>;
 
@@ -19,11 +21,19 @@ const dispositivoMock = {
 };
 
 export default function MeuDispositivoScreen({ navigation }: Props) {
-  const { conectado } = dispositivoMock;
+  const [dispositivo, setDispositivo] = useState<typeof dispositivoMock | null>(dispositivoMock);
+  const clearDevice = useDeviceStore((state) => state.clear);
+  const conectado = dispositivo?.conectado ?? false;
 
   function handleParear() {
-    // TODO: abrir fluxo real de pareamento (ler QR code ou digitar código do ESP32)
-    Alert.alert('Parear dispositivo', 'Fluxo de pareamento ainda não implementado.');
+    navigation.navigate('ConexaoEsp32');
+  }
+
+  function handleExcluir() {
+    Alert.alert('Excluir dispositivo', 'O dispositivo será removido deste perfil. Deseja continuar?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: () => { clearDevice(); setDispositivo(null); } },
+    ]);
   }
 
   return (
@@ -31,6 +41,7 @@ export default function MeuDispositivoScreen({ navigation }: Props) {
       <BackHeader title="Meu dispositivo" onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.container}>
+        {dispositivo ? <>
         <Card style={styles.statusCard}>
           <View style={styles.statusRow}>
             <View style={[styles.statusDot, { backgroundColor: conectado ? colors.moss : colors.ember }]} />
@@ -44,12 +55,14 @@ export default function MeuDispositivoScreen({ navigation }: Props) {
         </Card>
 
         <Card style={styles.infoCard}>
-          <InfoRow label="Nome" value={dispositivoMock.nome} />
-          <InfoRow label="Código do hardware" value={dispositivoMock.codigoHardware} />
-          <InfoRow label="Última sincronização" value={dispositivoMock.ultimaSincronizacao} last />
+          <InfoRow label="Nome" value={dispositivo.nome} />
+          <InfoRow label="Código do hardware" value={dispositivo.codigoHardware} />
+          <InfoRow label="Última sincronização" value={dispositivo.ultimaSincronizacao} last />
         </Card>
 
         <AppButton label="Parear novo dispositivo" onPress={handleParear} style={{ marginTop: 8 }} />
+        <Pressable onPress={handleExcluir} style={styles.deleteButton}><Text style={styles.deleteLabel}>Excluir dispositivo</Text></Pressable>
+        </> : <Card style={styles.emptyCard}><Text style={styles.emptyTitle}>Nenhum dispositivo conectado</Text><Text style={styles.emptyText}>Adicione um ESP32 por Bluetooth ou ponto de acesso.</Text><AppButton label="Adicionar dispositivo" onPress={handleParear} style={{ marginTop: 16 }} /></Card>}
       </ScrollView>
     </SafeAreaView>
   );
@@ -76,4 +89,9 @@ const styles = StyleSheet.create({
   infoRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   infoLabel: { fontFamily: fonts.body, fontSize: 13, color: colors.textSecondary },
   infoValue: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.ink },
+  deleteButton: { alignItems: 'center', padding: 16, marginTop: 8 },
+  deleteLabel: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.ember },
+  emptyCard: { marginTop: 8 },
+  emptyTitle: { fontFamily: fonts.display, fontSize: 20, color: colors.ink, marginBottom: 8 },
+  emptyText: { fontFamily: fonts.body, fontSize: 15, lineHeight: 22, color: colors.textSecondary },
 });

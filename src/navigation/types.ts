@@ -10,4 +10,5 @@ export type RootStackParamList = {
   Alertas: undefined;
   ConfigurarLimites: { idosoId: string; nome: string };
   VincularIdoso: undefined;
+  ConexaoEsp32: undefined;
 };

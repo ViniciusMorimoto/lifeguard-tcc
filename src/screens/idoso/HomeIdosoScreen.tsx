@@ -7,14 +7,15 @@ import { useAuthStore } from '../../store/authStore';
 import { colors, fonts, radii } from '../../theme/theme';
 import VitalCard from '../../components/VitalCard';
 import StatusPill from '../../components/StatusPill';
+import { useEsp32Monitoring } from '../../services/useEsp32Monitoring';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeIdoso'>;
 
-// TODO: substituir por dados reais (GET /leituras/atual/:idosoId)
-const leituraMock = { batimento: 78, temperatura: 36.5, status: 'normal' as const, ultimaAtualizacao: 'há 2 minutos' };
-
 export default function HomeIdosoScreen({ navigation }: Props) {
   const user = useAuthStore((state) => state.user);
+  const { pulse, temperature, online, lastUpdate, mqttStatus, hasDevice } = useEsp32Monitoring();
+  const status = online ? 'normal' : 'atencao';
+  const updatedLabel = lastUpdate ? `há ${Math.max(1, Math.round((Date.now() - lastUpdate) / 60000))} min` : 'aguardando dados';
 
   const acessos = [
     { icon: 'chart-line' as const, label: 'Histórico', onPress: () => navigation.navigate('Historico') },
@@ -29,14 +30,14 @@ export default function HomeIdosoScreen({ navigation }: Props) {
         <View style={styles.header}>
           <View>
             <Text style={styles.saudacao}>Olá, {user?.nome ?? 'Usuário'}</Text>
-            <Text style={styles.subSaudacao}>Atualizado {leituraMock.ultimaAtualizacao}</Text>
+            <Text style={styles.subSaudacao}>{hasDevice ? `Atualizado ${updatedLabel}` : 'Nenhum dispositivo pareado'}</Text>
           </View>
-          <StatusPill status={leituraMock.status} />
+          <StatusPill status={status} />
         </View>
 
         <View style={styles.readingsRow}>
-          <VitalCard icon="heart-pulse" iconColor={colors.ember} value={leituraMock.batimento} unit="bpm" label="Batimento" showPulse />
-          <VitalCard icon="thermometer" iconColor={colors.amber} value={leituraMock.temperatura} unit="°C" label="Temperatura" />
+          <VitalCard icon="heart-pulse" iconColor={colors.ember} value={pulse ?? '--'} unit="bpm" label="Batimento" showPulse />
+          <VitalCard icon="thermometer" iconColor={colors.amber} value={temperature ?? '--'} unit="°C" label="Temperatura" />
         </View>
 
         <Text style={styles.sectionTitle}>Acesso rápido</Text>
@@ -53,6 +54,7 @@ export default function HomeIdosoScreen({ navigation }: Props) {
           <MaterialCommunityIcons name="alert-octagon-outline" size={24} color={colors.sand} />
           <Text style={styles.sosLabel}>Emergência (SOS)</Text>
         </Pressable>
+        {hasDevice && mqttStatus !== 'connected' && <Text style={styles.connectionWarning}>Conexão MQTT: {mqttStatus}</Text>}
       </ScrollView>
     </SafeAreaView>
   );
@@ -71,4 +73,5 @@ const styles = StyleSheet.create({
   gridLabel: { fontFamily: fonts.body, fontSize: 12, color: colors.textPrimary, textAlign: 'center' },
   sos: { flexDirection: 'row', backgroundColor: colors.ember, borderRadius: radii.lg, height: 56, alignItems: 'center', justifyContent: 'center', gap: 8 },
   sosLabel: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.sand },
+  connectionWarning: { fontFamily: fonts.body, fontSize: 12, color: colors.textSecondary, textAlign: 'center', marginBottom: 16 },
 });

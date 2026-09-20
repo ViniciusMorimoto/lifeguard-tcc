@@ -12,6 +12,8 @@ import DetalheIdosoScreen from '../screens/cuidador/DetalheIdosoScreen';
 import AlertasScreen from '../screens/cuidador/AlertasScreen';
 import ConfigurarLimitesScreen from '../screens/cuidador/ConfigurarLimitesScreen';
 import VincularIdosoScreen from '../screens/cuidador/VincularIdosoScreen';
+import ConexaoEsp32Screen from '../screens/ConexaoEsp32Screen.tsx';
+
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -30,6 +32,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Alertas" component={AlertasScreen} />
         <Stack.Screen name="ConfigurarLimites" component={ConfigurarLimitesScreen} />
         <Stack.Screen name="VincularIdoso" component={VincularIdosoScreen} />
+        <Stack.Screen name="ConexaoEsp32" component={ConexaoEsp32Screen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
