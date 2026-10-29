@@ -36,6 +36,7 @@ yarn-error.*
 !.env.example
 .env*.local
 .secrets/
+/firmware/esp32_lifeguard/config.h
 /.tools/
 /.playwright-cli/
 /credentials.json

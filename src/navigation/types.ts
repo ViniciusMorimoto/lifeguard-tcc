@@ -11,7 +11,7 @@ export type RootStackParamList = {
   Historico: { idosoId?: string; nome?: string } | undefined;
   HistoricoAlteracoes: { idosoId: string; nome: string };
   MeuDispositivo: undefined;
-  ParearDispositivo: undefined;
+  ParearDispositivo: { trocarRede?: boolean } | undefined;
   Cuidadores: undefined;
   LimitesIdoso: undefined;
   DetalheIdoso: { idosoId: string; nome: string };

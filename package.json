@@ -4,12 +4,12 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
+    "android": "expo run:android",
     "android:native": "expo run:android",
     "apk:local": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-android-apk.ps1",
     "apk:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/publish-android-apk.ps1",
     "update:publish": "npx eas-cli update --channel production",
-    "ios": "expo start --ios",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && expo install --check"
