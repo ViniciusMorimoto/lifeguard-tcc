@@ -8,6 +8,10 @@
 #include <esp_system.h>
 #include <WebServer.h>
 #include <Preferences.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
 #include "config.h"
 
@@ -16,6 +20,10 @@ constexpr uint8_t DS18B20_PIN = 5;
 constexpr uint16_t PULSE_THRESHOLD = 550;
 constexpr unsigned long SAMPLE_INTERVAL_MS = 5000;
 constexpr unsigned long WIFI_RETRY_MS = 10'000;
+constexpr char PROVISIONING_NAME[] = "LIFEGUARD-ESP32";
+constexpr char BLE_SERVICE_UUID[] = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+constexpr char BLE_DATA_UUID[] = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+constexpr char BLE_COMMAND_UUID[] = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
 OneWire oneWire(DS18B20_PIN);
 DallasTemperature temperatureSensor(&oneWire);
@@ -33,12 +41,101 @@ int bpm = 0;
 unsigned long lastBeatAt = 0;
 unsigned long lastSampleAt = 0;
 unsigned long lastWifiAttemptAt = 0;
+unsigned long lastClockSyncAttemptAt = 0;
 Preferences preferences;
 WebServer setupServer(80);
 String wifiSsid;
 String wifiPassword;
 String deviceCredential;
 bool setupActive = false;
+bool wifiAttempted = false;
+bool wifiWasConnected = false;
+bool clockSyncAttempted = false;
+BLECharacteristic *bleDataCharacteristic = nullptr;
+bool bleClientConnected = false;
+
+void handleBluetoothCommand(String command);
+
+class ProvisioningConnectionCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer *) override {
+    bleClientConnected = true;
+  }
+
+  void onDisconnect(BLEServer *server) override {
+    bleClientConnected = false;
+    server->getAdvertising()->start();
+  }
+};
+
+class ProvisioningCommandCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *characteristic) override {
+    String command = characteristic->getValue().c_str();
+    command.replace("\r", "");
+    command.replace("\n", "");
+    handleBluetoothCommand(command);
+  }
+};
+
+void sendBluetoothMessage(const String &message) {
+  if (!bleDataCharacteristic || !bleClientConnected) return;
+  bleDataCharacteristic->setValue(message.c_str());
+  bleDataCharacteristic->notify();
+}
+
+void startBluetooth() {
+  BLEDevice::init(PROVISIONING_NAME);
+  BLEDevice::setMTU(185);
+  BLEServer *server = BLEDevice::createServer();
+  server->setCallbacks(new ProvisioningConnectionCallbacks());
+  BLEService *service = server->createService(BLE_SERVICE_UUID);
+
+  bleDataCharacteristic = service->createCharacteristic(
+    BLE_DATA_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  bleDataCharacteristic->addDescriptor(new BLE2902());
+
+  BLECharacteristic *commandCharacteristic = service->createCharacteristic(
+    BLE_COMMAND_UUID, BLECharacteristic::PROPERTY_WRITE);
+  commandCharacteristic->setCallbacks(new ProvisioningCommandCallbacks());
+
+  service->start();
+  server->getAdvertising()->addServiceUUID(BLE_SERVICE_UUID);
+  server->getAdvertising()->start();
+}
+
+void handleBluetoothCommand(String command) {
+  if (command == "SAVE") {
+    if (wifiSsid.isEmpty() || deviceCredential.isEmpty()) {
+      sendBluetoothMessage("{\"type\":\"error\",\"message\":\"dados_incompletos\"}");
+      return;
+    }
+    preferences.putString("ssid", wifiSsid);
+    preferences.putString("password", wifiPassword);
+    preferences.putString("credential", deviceCredential);
+    sendBluetoothMessage("{\"type\":\"config_saved\",\"ok\":true}");
+    WiFi.disconnect();
+    lastWifiAttemptAt = 0;
+    wifiAttempted = false;
+    connectWifi();
+    return;
+  }
+
+  const int separator = command.indexOf('=');
+  if (separator <= 0) {
+    sendBluetoothMessage("{\"type\":\"error\",\"message\":\"comando_invalido\"}");
+    return;
+  }
+  String key = command.substring(0, separator);
+  String value = command.substring(separator + 1);
+  key.toUpperCase();
+  if (key == "SSID") wifiSsid = value;
+  else if (key == "PASSWORD") wifiPassword = value;
+  else if (key == "CREDENTIAL") deviceCredential = value;
+  else {
+    sendBluetoothMessage("{\"type\":\"error\",\"message\":\"campo_invalido\"}");
+    return;
+  }
+  sendBluetoothMessage("{\"type\":\"config_received\",\"ok\":true}");
+}
 
 bool isConfigured(const char *value) {
   return value && value[0] && strstr(value, "COLE_AQUI") == nullptr && strstr(value, "NOME_DA_REDE") == nullptr &&
@@ -46,10 +143,11 @@ bool isConfigured(const char *value) {
 }
 
 void connectWifi() {
-  if (wifiSsid.isEmpty() || wifiPassword.isEmpty()) return;
-  if (WiFi.status() == WL_CONNECTED || millis() - lastWifiAttemptAt < WIFI_RETRY_MS) return;
+  if (wifiSsid.isEmpty()) return;
+  if (WiFi.status() == WL_CONNECTED || (wifiAttempted && millis() - lastWifiAttemptAt < WIFI_RETRY_MS)) return;
   lastWifiAttemptAt = millis();
-  Serial.printf("Conectando ao Wi-Fi %s...\n", wifiSsid.c_str());
+  wifiAttempted = true;
+  Serial.printf("Tentando conectar ao Wi-Fi %s (status %d)...\n", wifiSsid.c_str(), WiFi.status());
   WiFi.disconnect();
   WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
 }
@@ -57,7 +155,7 @@ void connectWifi() {
 void startSetup() {
   if (setupActive) return;
   WiFi.mode(WIFI_AP_STA);
-  if (!WiFi.softAP("LifeGuard-ESP32")) {
+  if (!WiFi.softAP(PROVISIONING_NAME)) {
     Serial.println("Falha ao iniciar rede de configuracao.");
     return;
   }
@@ -78,7 +176,7 @@ void startSetup() {
   });
   setupServer.begin();
   setupActive = true;
-  Serial.println("Configuracao pelo app: Wi-Fi LifeGuard-ESP32 em 192.168.4.1");
+  Serial.println("Configuracao pelo app: Wi-Fi LIFEGUARD-ESP32 em 192.168.4.1 ou Bluetooth BLE.");
 }
 
 bool syncClock() {
@@ -134,11 +232,6 @@ void scheduleRetry() {
 
 void sendPendingSample() {
   if (!pending.active || WiFi.status() != WL_CONNECTED || millis() < pending.retryAt) return;
-  if (!syncClock()) {
-    Serial.println("NTP indisponível; leitura será reenviada.");
-    scheduleRetry();
-    return;
-  }
 
   WiFiClientSecure client;
   client.setCACert(LIFEGUARD_ROOT_CA);
@@ -196,6 +289,7 @@ void setup() {
   // The temporary AP is available after every boot so a user can change Wi-Fi
   // through the app without a USB cable.
   startSetup();
+  startBluetooth();
   if (!wifiSsid.isEmpty() && !deviceCredential.isEmpty()) connectWifi();
 }
 
@@ -203,7 +297,21 @@ void loop() {
   if (setupActive) setupServer.handleClient();
   updatePulse();
   connectWifi();
-  if (WiFi.status() == WL_CONNECTED && time(nullptr) < 1'700'000'000) syncClock();
+  if (WiFi.status() == WL_CONNECTED && !wifiWasConnected) {
+    wifiWasConnected = true;
+    Serial.printf("Wi-Fi conectado. IP: %s\n", WiFi.localIP().toString().c_str());
+  } else if (WiFi.status() != WL_CONNECTED && wifiWasConnected) {
+    wifiWasConnected = false;
+    Serial.printf("Wi-Fi desconectado (status %d). O firmware tentará reconectar.\n", WiFi.status());
+  }
+  if (WiFi.status() == WL_CONNECTED && time(nullptr) < 1'700'000'000 &&
+      (!clockSyncAttempted || millis() - lastClockSyncAttemptAt >= 30'000)) {
+    clockSyncAttempted = true;
+    lastClockSyncAttemptAt = millis();
+    Serial.println("Sincronizando relógio com NTP...");
+    if (syncClock()) Serial.println("Relógio sincronizado; o envio de leituras será iniciado.");
+    else Serial.println("Falha na sincronização NTP. Verifique se a rede permite acesso à internet e ao NTP.");
+  }
   sendPendingSample();
 
   if (!pending.active && millis() - lastSampleAt >= SAMPLE_INTERVAL_MS && time(nullptr) >= 1'700'000'000) {

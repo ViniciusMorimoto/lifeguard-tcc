@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { classifyReading } from '../domain/readings.js';
 import { AlertStatus, LinkStatus, UserType } from '../generated/prisma/enums.js';
 import { HttpError } from '../lib/http-error.js';
+import { aggregateReadingsByInterval } from '../domain/reading-aggregates.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { serializeElderProfile, serializeGender } from '../serializers.js';
@@ -11,7 +12,7 @@ const idSchema = z.uuid();
 const alertStatusLabels = { NEW: 'novo', SEEN: 'visto', RESOLVED: 'resolvido' } as const;
 const limitsSchema = z.object({
   batimentoMin: z.number().int().min(30).max(150),
-  batimentoMax: z.number().int().min(50).max(240),
+  batimentoMax: z.number().int().min(50).max(250),
   temperaturaMin: z.number().min(30).max(40),
   temperaturaMax: z.number().min(34).max(45),
 }).refine((data) => data.batimentoMin < data.batimentoMax, {
@@ -94,7 +95,7 @@ monitoringRouter.get('/idosos', async (req, res) => {
           devices: {
             where: { active: true },
             take: 1,
-            include: { readings: { orderBy: { timestamp: 'desc' }, take: 1 } },
+            include: { readings: { where: { valid: true }, orderBy: { timestamp: 'desc' }, take: 1 } },
           },
         },
       },
@@ -136,7 +137,7 @@ monitoringRouter.get('/idosos/:idosoId', async (req, res) => {
       devices: {
         where: { active: true },
         take: 1,
-        include: { readings: { orderBy: { timestamp: 'desc' }, take: 1 } },
+        include: { readings: { where: { valid: true }, orderBy: { timestamp: 'desc' }, take: 1 } },
       },
     },
   });
@@ -169,15 +170,76 @@ monitoringRouter.get('/idosos/:idosoId', async (req, res) => {
 
 monitoringRouter.get('/idosos/:idosoId/leituras', async (req, res) => {
   const elderId = idSchema.parse(req.params.idosoId);
-  const query = z.object({ limite: z.coerce.number().int().min(1).max(500).default(100) }).parse(req.query);
+  const query = z.object({ limite: z.coerce.number().int().min(1).max(500).default(100), resolucao: z.enum(['10s', '1h']).default('1h') }).parse(req.query);
   await assertElderAccess(req.auth!.userId, req.auth!.type, elderId);
-
-  const readings = await prisma.reading.findMany({
-    where: { device: { elderId } },
-    orderBy: { timestamp: 'desc' },
-    take: query.limite,
-  });
-  res.json({ leituras: readings.map(serializeReading) });
+  if (query.resolucao === '10s') {
+    const since = new Date(Date.now() - 5 * 60_000);
+    const readings = await prisma.reading.findMany({
+      where: { device: { elderId }, timestamp: { gte: since } },
+      orderBy: { timestamp: 'asc' },
+      take: 120,
+    });
+    const buckets = aggregateReadingsByInterval(readings, 10_000);
+    res.json({ leituras: buckets.slice(-30).map((bucket) => ({
+      id: bucket.timestamp.toISOString(),
+      batimento: bucket.heartRateAverage === null ? null : Math.round(bucket.heartRateAverage),
+      batimentoMinimo: bucket.heartRateMinimum,
+      batimentoMaximo: bucket.heartRateMaximum,
+      temperatura: bucket.temperatureAverage,
+      temperaturaMinima: bucket.temperatureMinimum,
+      temperaturaMaxima: bucket.temperatureMaximum,
+      horario: bucket.timestamp,
+      qualidadeSinal: bucket.sampleCount ? 'good' : 'no_contact',
+      contatoDetectado: bucket.sampleCount > 0,
+      valida: bucket.sampleCount > 0,
+      motivoInvalido: null,
+      origem: 'aggregate',
+    })) });
+    return;
+  }
+  const hourlyReadings = await prisma.$queryRaw<Array<{
+    horario: Date;
+    batimento: number | null;
+    batimentoMinimo: number | null;
+    batimentoMaximo: number | null;
+    temperatura: number | null;
+    temperaturaMinima: number | null;
+    temperaturaMaxima: number | null;
+    quantidade: bigint;
+  }>>`
+    SELECT
+      date_trunc('hour', reading."timestamp") AS horario,
+      AVG(reading."heartRate")::double precision AS batimento,
+      MIN(reading."heartRate") AS "batimentoMinimo",
+      MAX(reading."heartRate") AS "batimentoMaximo",
+      AVG(reading."temperature") AS temperatura,
+      MIN(reading."temperature") AS "temperaturaMinima",
+      MAX(reading."temperature") AS "temperaturaMaxima",
+      COUNT(*) AS quantidade
+    FROM "Reading" reading
+    INNER JOIN "Device" device ON device.id = reading."deviceId"
+    WHERE device."elderId" = ${elderId}::uuid
+      AND reading.valid = true
+      AND reading."timestamp" >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - (${query.limite} * INTERVAL '1 hour')
+    GROUP BY date_trunc('hour', reading."timestamp")
+    ORDER BY horario DESC
+    LIMIT ${query.limite}
+  `;
+  res.json({ leituras: hourlyReadings.map((item) => ({
+    id: item.horario.toISOString(),
+    batimento: item.batimento === null ? null : Math.round(item.batimento),
+    batimentoMinimo: item.batimentoMinimo,
+    batimentoMaximo: item.batimentoMaximo,
+    temperatura: item.temperatura,
+    temperaturaMinima: item.temperaturaMinima,
+    temperaturaMaxima: item.temperaturaMaxima,
+    horario: item.horario,
+    qualidadeSinal: 'good',
+    contatoDetectado: true,
+    valida: Number(item.quantidade) > 0,
+    motivoInvalido: null,
+    origem: 'aggregate',
+  })) });
 });
 
 monitoringRouter.get('/idosos/:idosoId/alteracoes', async (req, res) => {

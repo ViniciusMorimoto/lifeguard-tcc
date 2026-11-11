@@ -86,6 +86,7 @@ export default function MeuDispositivoScreen({ navigation }: Props) {
               </Text>
               <Text style={styles.text}>{device ? device.nickname : 'Configure seu ESP32 para começar a receber leituras.'}</Text>
               {device ? <Text style={styles.text}>Último contato: {device.lastSeenAt ? formatDateTime(device.lastSeenAt) : 'ainda não recebido'}</Text> : null}
+              {device && !device.lastSeenAt ? <Text style={styles.text}>Aguardando a primeira leitura. Confira se o dispositivo está ligado e conectado à rede Wi-Fi configurada.</Text> : null}
             </Card>
 
             <InlineNotice message="A conexão indica comunicação recente com o servidor, não a precisão do sensor. Após 90 segundos sem sinal, o dispositivo aparece desconectado." />
@@ -96,12 +97,12 @@ export default function MeuDispositivoScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('ParearDispositivo', { trocarRede: true })}
               disabled={busy}
             /> : null}
-            <AppButton
-              label={device ? 'Preparar outro dispositivo' : 'Preparar dispositivo'}
+            {!device ? <AppButton
+              label="Preparar dispositivo"
               icon="link-variant"
               onPress={() => navigation.navigate('ParearDispositivo')}
               disabled={busy}
-            />
+            /> : null}
             {device ? <AppButton label="Desconectar dispositivo" variant="secondary" onPress={revoke} loading={busy} /> : null}
           </>
         )}

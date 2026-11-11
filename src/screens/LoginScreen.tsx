@@ -9,7 +9,7 @@ import AppTextInput from '../components/AppTextInput';
 import AppButton from '../components/AppButton';
 import BrandLogo from '../components/BrandLogo';
 import SegmentedToggle from '../components/SegmentedToggle';
-import { apiRequest, ApiError, getApiUrl, setApiUrl } from '../services/api';
+import { apiRequest, ApiError } from '../services/api';
 import OptionCheckbox from '../components/OptionCheckbox';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
@@ -19,8 +19,6 @@ export default function LoginScreen({ navigation, route }: Props) {
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [tipoConta, setTipoConta] = useState<'idoso' | 'cuidador'>(route.params?.tipoConta ?? 'idoso');
-  const [mostrarServidor, setMostrarServidor] = useState(false);
-  const [servidor, setServidor] = useState(getApiUrl());
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
   const [manterConectado, setManterConectado] = useState(true);
@@ -37,13 +35,7 @@ export default function LoginScreen({ navigation, route }: Props) {
       setErro('Digite um e-mail válido e sua senha.');
       return;
     }
-    if (__DEV__ && !/^https?:\/\/\S+\/api$/.test(servidor.trim().replace(/\/+$/, ''))) {
-      setErro('Confira o endereço da API. Exemplo: https://api.exemplo.com/api');
-      setMostrarServidor(true);
-      return;
-    }
     setLoading(true);
-    setApiUrl(servidor);
     try {
       const response = await apiRequest<{ token: string; usuario: NonNullable<ReturnType<typeof useAuthStore.getState>['user']> }>('/auth/login', {
         method: 'POST',
@@ -102,25 +94,9 @@ export default function LoginScreen({ navigation, route }: Props) {
 
           <OptionCheckbox checked={manterConectado} label="Manter conectado neste aparelho" onChange={setManterConectado} disabled={loading} />
 
-          {__DEV__ && mostrarServidor ? (
-            <AppTextInput
-              label="Endereço da API (avançado)"
-              value={servidor}
-              onChangeText={(value) => { setServidor(value); setErro(''); }}
-              editable={!loading}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              helperText="Altere somente para testes de desenvolvimento. O endereço deve terminar em /api."
-            />
-          ) : null}
-
           {erro ? <Text accessibilityRole="alert" style={styles.erro}>{erro}</Text> : null}
 
           <AppButton label="Entrar" icon="login" onPress={handleLogin} loading={loading} />
-          {__DEV__ ? (
-            <AppButton label={mostrarServidor ? 'Ocultar configuração avançada' : 'Configuração avançada'} variant="text" onPress={() => setMostrarServidor((value) => !value)} disabled={loading} style={styles.serverConfig} />
-          ) : null}
           <AppButton label="Esqueci minha senha" variant="text" onPress={() => navigation.navigate('RecuperarSenha')} disabled={loading} style={styles.forgot} />
           <View style={styles.createAccount}>
             <Text style={styles.createText}>Ainda não tem conta?</Text>
@@ -143,7 +119,6 @@ const styles = StyleSheet.create({
   sectionLabel: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.ink, marginBottom: 8 },
   erro: { fontFamily: fonts.body, color: colors.emberText, marginBottom: 12, fontSize: 14 },
   forgot: { alignSelf: 'center', marginVertical: 4 },
-  serverConfig: { alignSelf: 'center', marginTop: 4 },
   createAccount: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 },
   createText: { fontFamily: fonts.body, fontSize: 15, color: colors.textSecondary },
 });

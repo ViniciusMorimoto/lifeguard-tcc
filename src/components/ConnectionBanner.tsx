@@ -10,6 +10,7 @@ import { checkApiConnection } from '../services/connectivity';
 export default function ConnectionBanner() {
   const status = useConnectionStore((state) => state.status);
   const message = useConnectionStore((state) => state.message);
+  const deviceProvisioning = useConnectionStore((state) => state.deviceProvisioning);
   const setOffline = useConnectionStore((state) => state.setOffline);
   const retryTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -40,7 +41,7 @@ export default function ConnectionBanner() {
     };
   }, [status]);
 
-  if (status !== 'offline') return null;
+  if (status !== 'offline' || deviceProvisioning) return null;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>

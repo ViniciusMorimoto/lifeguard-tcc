@@ -3,6 +3,7 @@ import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { deviceSampleSchema, hashDeviceValue, matchesDeviceSecret, newDeviceSecret, normalizeDeviceSample, sustainedState } from './device-readings.js';
 import { classifyReading } from './readings.js';
+import { aggregateReadingsByInterval } from './reading-aggregates.js';
 
 const sample = { sampleId: randomUUID(), timestamp: new Date().toISOString(), heartRate: 75, temperature: 36.5, contactDetected: true, signalQuality: 'GOOD' as const };
 const limits = { heartRateMinimum: 50, heartRateMaximum: 120, temperatureMinimum: 35, temperatureMaximum: 38 };
@@ -18,9 +19,10 @@ test('device: credential is random, hashed and cannot authenticate with wrong se
   assert.ok(!matchesDeviceSecret(secret, 'malformed'));
 });
 test('device: schema refuses user id, source spoofing and non-numeric readings', () => {
-  for (const extra of [{ elderId: randomUUID() }, { source: 'SIMULATOR' }, { heartRate: '80' }, { temperature: Infinity }, { sampleId: '123' }]) {
+  for (const extra of [{ elderId: randomUUID() }, { source: 'SIMULATOR' }, { heartRate: '80' }, { heartRate: 251 }, { temperature: Infinity }, { sampleId: '123' }]) {
     assert.equal(deviceSampleSchema.safeParse({ ...sample, ...extra }).success, false);
   }
+  assert.equal(deviceSampleSchema.safeParse({ ...sample, heartRate: 250 }).success, true);
 });
 test('device: no contact / poor quality / impossible values never become valid measurements', () => {
   for (const extra of [{ contactDetected: false }, { signalQuality: 'POOR' as const }, { heartRate: 290 }, { temperature: 70 }, { heartRate: null, temperature: null }]) {
@@ -43,4 +45,19 @@ test('device: only three same-direction samples over sufficient time confirm a v
 });
 test('device: old readings no longer display normal status', () => {
   assert.equal(classifyReading({ ...rows([75])[0]!, timestamp: new Date(Date.now() - 100_000) }, limits), 'sem_sinal');
+});
+test('reading history: groups 10-second samples and preserves average, minimum, maximum, and invalid buckets', () => {
+  const start = new Date('2026-11-10T12:00:01.000Z');
+  const buckets = aggregateReadingsByInterval([
+    { timestamp: start, valid: true, heartRate: 70, temperature: 36.2 },
+    { timestamp: new Date(start.getTime() + 5000), valid: true, heartRate: 90, temperature: 37.2 },
+    { timestamp: new Date(start.getTime() + 10_000), valid: false, heartRate: null, temperature: null },
+  ], 10_000);
+  assert.equal(buckets.length, 2);
+  assert.equal(buckets[0]!.heartRateAverage, 80);
+  assert.equal(buckets[0]!.heartRateMinimum, 70);
+  assert.equal(buckets[0]!.heartRateMaximum, 90);
+  assert.equal(buckets[0]!.temperatureAverage, 36.7);
+  assert.equal(buckets[1]!.sampleCount, 0);
+  assert.equal(buckets[1]!.heartRateAverage, null);
 });

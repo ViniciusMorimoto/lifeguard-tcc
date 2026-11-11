@@ -54,6 +54,7 @@ enum AlertStatus {
 }
 
 enum AggregationPeriod {
+  FIVE_MINUTES
   HOUR
   DAY
 }

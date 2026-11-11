@@ -11,6 +11,7 @@ Não grava firmware, não faz Bluetooth e não valida a precisão dos sensores.
 3. Transfere manualmente a credencial para configuração local do firmware (fora do Git).
 4. ESP32 conecta ao Wi-Fi, sincroniza UTC via NTP e envia uma leitura a cada 5 segundos.
 5. A tela consulta o servidor; não apresenta mais conexão ou pareamento simulados.
+6. O paciente mantém apenas um dispositivo ativo. Para trocar, desconecte o atual antes de configurar outro.
 
 Não colocar senha da conta, token de usuário, banco ou segredo JWT no firmware.
 A credencial do hardware serve APENAS para enviar leituras do paciente proprietário.
@@ -48,9 +49,12 @@ contato físico confiavelmente se o firmware mentir ou o sensor não o detectar.
 - 5xx/timeout: repetir MESMO UUID e MESMO corpo com espera progressiva.
 
 Sem contato, sinal ruim/desconhecido, ausência de medidas ou valores fora da faixa
-técnica (30–240 bpm; 30–45 °C) são registrados como inválidos, com medidas nulas.
+técnica (30–250 bpm; 30–45 °C) são registrados como inválidos, com medidas nulas.
 Esses números são filtros técnicos do protótipo, não limites clínicos recomendados.
 Temperatura deve ser corporal: sensor ambiente não equivale a medição corporal.
+O histórico apresenta médias, picos e mínimos por hora; o gráfico mostra os últimos
+cinco minutos em pontos médios de dez segundos. Sem nova medida válida, o visor mantém
+o último valor e seu horário.
 
 ## Alertas e conexão
 
@@ -64,10 +68,11 @@ Temperatura deve ser corporal: sensor ambiente não equivale a medição corpora
   Destinatários: apenas cuidadores com vínculo ativo e preferências habilitadas.
   Entrega push depende de rede/provedor: retentativa após resposta perdida pode
   duplicar entrega; não é garantia de entrega única nem sistema de emergência.
-- Sem leitura recente por 90 s: `sem_sinal`; home deixa de mostrar números antigos.
-  Meu dispositivo considera último contato, não a validade da medida.
+- Sem leitura recente por 90 s: `sem_sinal`; home mantém os últimos valores válidos e
+  informa o horário do último registro. Meu dispositivo considera último contato,
+  não a validade da medida.
 - Revogação preserva histórico e impede novos envios; gerar outra credencial troca
-  o dispositivo ativo. Não requer apagar dados do paciente.
+  o dispositivo somente depois de desconectar o atual. Não requer apagar dados do paciente.
 
 ## Antes da demonstração
 

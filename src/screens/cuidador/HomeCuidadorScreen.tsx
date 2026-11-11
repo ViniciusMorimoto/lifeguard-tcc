@@ -95,7 +95,6 @@ export default function HomeCuidadorScreen({ navigation }: Props) {
             </View>
             <View style={styles.idosoInfo}>
               <Text style={styles.idosoNome}>{idoso.nome}</Text>
-              {idoso.simulado ? <Text style={styles.idosoLeitura}>SIMULAÇÃO · dados fictícios</Text> : null}
               <Text style={styles.idosoLeitura}>{idoso.batimento ?? '--'} bpm · {idoso.temperatura ?? '--'}°C</Text>
             </View>
             <StatusPill status={idoso.status} />

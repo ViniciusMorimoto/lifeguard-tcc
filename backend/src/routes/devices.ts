@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { AggregationPeriod } from '../generated/prisma/enums.js';
 import { HttpError } from '../lib/http-error.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createRateLimit } from '../middleware/rate-limit.js';
@@ -28,7 +29,10 @@ devicesRouter.post('/provisionar', requireAuth, patientOnly, manageLimit, async 
   const secret = newDeviceSecret();
   const device = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${req.auth!.userId}::uuid FOR UPDATE`;
-    await tx.device.updateMany({ where: { elderId: req.auth!.userId, active: true }, data: { active: false, credentialHash: null } });
+    const current = await tx.device.findFirst({ where: { elderId: req.auth!.userId, active: true }, select: { id: true } });
+    if (current) {
+      throw new HttpError(409, 'Cada paciente pode ter apenas um dispositivo. Desconecte o atual antes de configurar outro.', 'DEVICE_LIMIT_REACHED');
+    }
     return tx.device.create({ data: { elderId: req.auth!.userId, nickname: nome, hardwareCode: `LG-${randomUUID()}`, isSimulator: modo === 'simulador', credentialHash: modo === 'real' ? hashDeviceValue(secret) : null }, select: deviceSelect });
   });
   res.status(201).json({ dispositivo: device, credencial: modo === 'real' ? `lgd_${device.id}.${secret}` : null });
@@ -94,6 +98,29 @@ async function storeSample(candidate: { id: string; elderId: string }, sample: D
     if (latest && timestamp <= latest.timestamp) throw new HttpError(409, 'Leitura fora de ordem.', 'OUT_OF_ORDER_SAMPLE');
     const reading = await tx.reading.create({ data: { deviceId: device.id, sampleId: sample.sampleId, payloadHash, timestamp, source: device.isSimulator ? 'SIMULATOR' : 'DEVICE', ...normalizeDeviceSample(sample) } });
     await tx.device.update({ where: { id: device.id }, data: { lastSeenAt: now } });
+    if (reading.valid) {
+      const periodStart = new Date(Math.floor(timestamp.getTime() / 300_000) * 300_000);
+      const periodEnd = new Date(periodStart.getTime() + 300_000);
+      const samples = await tx.reading.findMany({
+        where: { deviceId: device.id, valid: true, timestamp: { gte: periodStart, lt: periodEnd } },
+        select: { heartRate: true, temperature: true },
+      });
+      const heartRates = samples.flatMap((item) => item.heartRate === null ? [] : [item.heartRate]);
+      const temperatures = samples.flatMap((item) => item.temperature === null ? [] : [item.temperature]);
+      const average = (values: number[]) => values.length ? values.reduce((total, value) => total + value, 0) / values.length : null;
+      await tx.aggregatedReading.upsert({
+        where: { deviceId_period_periodStart: { deviceId: device.id, period: AggregationPeriod.FIVE_MINUTES, periodStart } },
+        create: {
+          deviceId: device.id, period: AggregationPeriod.FIVE_MINUTES, periodStart, sampleCount: samples.length,
+          heartRateAverage: average(heartRates), heartRateMinimum: heartRates.length ? Math.min(...heartRates) : null, heartRateMaximum: heartRates.length ? Math.max(...heartRates) : null,
+          temperatureAverage: average(temperatures), temperatureMinimum: temperatures.length ? Math.min(...temperatures) : null, temperatureMaximum: temperatures.length ? Math.max(...temperatures) : null,
+        },
+        update: {
+          sampleCount: samples.length, heartRateAverage: average(heartRates), heartRateMinimum: heartRates.length ? Math.min(...heartRates) : null, heartRateMaximum: heartRates.length ? Math.max(...heartRates) : null,
+          temperatureAverage: average(temperatures), temperatureMinimum: temperatures.length ? Math.min(...temperatures) : null, temperatureMaximum: temperatures.length ? Math.max(...temperatures) : null,
+        },
+      });
+    }
     const limits = device.elder.alertLimits;
     if (limits) {
       const recent = await tx.reading.findMany({ where: { deviceId: device.id }, orderBy: { timestamp: 'desc' }, take: 3 });

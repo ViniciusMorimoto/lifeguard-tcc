@@ -69,6 +69,11 @@ test('ESP32: provisioning, isolation, deduplication, alarms, caregiver queue and
     for (let i = 0; i < 3; i++) assert.equal((await request('/dispositivos/leituras', 'POST', credential, sample(140))).status, 201);
     assert.equal(await prisma.alert.count({ where: { elderId: patient.usuario.id } }), 1, 'cooldown blocks another episode within 10min');
     assert.equal((await request('/dispositivos/me', 'GET', patient.token)).data.dispositivo.conectado, true);
+    const secondDevice = await request('/dispositivos/provisionar', 'POST', patient.token, { nome: 'Substituto' });
+    assert.equal(secondDevice.status, 409, 'a patient cannot provision a second active device');
+    assert.equal((await request('/dispositivos/leituras', 'POST', credential, first)).status, 200, 'the current device remains active when another is rejected');
+    assert.equal((await request('/dispositivos/me', 'DELETE', patient.token)).status, 204);
+    assert.equal((await request('/dispositivos/leituras', 'POST', credential, first)).status, 401);
     const replacement = await request('/dispositivos/provisionar', 'POST', patient.token, { nome: 'Substituto' });
     assert.equal(replacement.status, 201);
     assert.equal((await request('/dispositivos/leituras', 'POST', credential, first)).status, 401);

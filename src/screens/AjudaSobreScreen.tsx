@@ -50,7 +50,6 @@ export default function AjudaSobreScreen({ navigation }: Props) {
         <View style={styles.about}>
           <BrandLogo />
           <Text style={styles.version}>Versão {version}</Text>
-          <Text style={styles.academic}>Protótipo acadêmico em desenvolvimento para o Trabalho de Conclusão de Curso.</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

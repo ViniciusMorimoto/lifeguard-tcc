@@ -1,4 +1,4 @@
-import { apiRequest, ApiError, formatDateTime, formatRelativeTime } from './api';
+import { apiRequest, ApiError, formatDateTime } from './api';
 import type { AlertLimits, Caregiver, Elder, MonitoringAlert } from '../store/monitoringStore';
 import type { ElderProfile, Gender } from '../store/authStore';
 import { useAuthStore } from '../store/authStore';
@@ -8,6 +8,10 @@ type ApiReading = {
   id: string;
   batimento: number | null;
   temperatura: number | null;
+  batimentoMinimo?: number | null;
+  batimentoMaximo?: number | null;
+  temperaturaMinima?: number | null;
+  temperaturaMaxima?: number | null;
   horario: string;
   qualidadeSinal: string;
   contatoDetectado: boolean;
@@ -25,7 +29,6 @@ type ApiElder = {
   genero?: Gender | null;
   perfilIdoso?: ElderProfile | null;
   status: Elder['status'];
-  simulado?: boolean;
   ultimaLeitura: ApiReading | null;
   limites?: ApiLimits | null;
 };
@@ -64,10 +67,10 @@ export function mapElder(elder: ApiElder): Elder {
     genero: elder.genero,
     perfilIdoso: elder.perfilIdoso,
     status: elder.status,
-    simulado: elder.simulado ?? false,
-    batimento: elder.status !== 'sem_sinal' && elder.ultimaLeitura?.valida ? elder.ultimaLeitura.batimento : null,
-    temperatura: elder.status !== 'sem_sinal' && elder.ultimaLeitura?.valida ? elder.ultimaLeitura.temperatura : null,
-    ultimaAtualizacao: formatRelativeTime(elder.ultimaLeitura?.horario),
+    // Mantém a última medida válida visível mesmo quando o sinal atual caiu.
+    batimento: elder.ultimaLeitura?.valida ? elder.ultimaLeitura.batimento : null,
+    temperatura: elder.ultimaLeitura?.valida ? elder.ultimaLeitura.temperatura : null,
+    ultimaAtualizacao: elder.ultimaLeitura ? formatDateTime(elder.ultimaLeitura.horario) : 'nenhum registro',
   };
 }
 
@@ -132,7 +135,6 @@ export async function fetchElder(elderId: string): Promise<{ elder: Elder; limit
     if (!cached) throw error;
     return {
       ...cached.data,
-      elder: { ...cached.data.elder, ultimaAtualizacao: `em ${formatDateTime(cached.savedAt)}` },
       cache: { fromCache: true, savedAt: cached.savedAt },
     };
   }
@@ -151,8 +153,8 @@ export async function saveLimits(elderId: string, limits: Omit<AlertLimits, 'upd
   return mapLimits(response.limites);
 }
 
-export async function fetchReadings(elderId: string, limit = 100) {
-  const response = await apiRequest<{ leituras: Reading[] }>(`/idosos/${elderId}/leituras?limite=${limit}`);
+export async function fetchReadings(elderId: string, limit = 100, resolucao: '10s' | '1h' = '1h') {
+  const response = await apiRequest<{ leituras: Reading[] }>(`/idosos/${elderId}/leituras?limite=${limit}&resolucao=${resolucao}`);
   return response.leituras;
 }
 

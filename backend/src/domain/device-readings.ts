@@ -6,7 +6,7 @@ export const DEVICE_STALE_MS = 90_000;
 export const deviceSampleSchema = z.object({
   sampleId: z.uuid(),
   timestamp: z.iso.datetime(),
-  heartRate: z.number().int().min(0).max(300).nullable(),
+  heartRate: z.number().int().min(0).max(250).nullable(),
   temperature: z.number().min(-20).max(100).nullable(),
   contactDetected: z.boolean(),
   signalQuality: z.enum(['GOOD', 'FAIR', 'POOR', 'NO_CONTACT', 'UNKNOWN']),
@@ -22,7 +22,7 @@ export function normalizeDeviceSample(sample: DeviceSample) {
   const invalidReason = !sample.contactDetected || sample.signalQuality === 'NO_CONTACT' ? 'Sem contato com o sensor.'
     : !['GOOD', 'FAIR'].includes(sample.signalQuality) ? 'Qualidade de sinal insuficiente.'
     : sample.heartRate === null && sample.temperature === null ? 'Nenhuma medida disponível.'
-    : (sample.heartRate !== null && (sample.heartRate < 30 || sample.heartRate > 240))
+    : (sample.heartRate !== null && (sample.heartRate < 30 || sample.heartRate > 250))
       || (sample.temperature !== null && (sample.temperature < 30 || sample.temperature > 45)) ? 'Medida fora da faixa técnica aceita.' : null;
   return {
     heartRate: invalidReason ? null : sample.heartRate,

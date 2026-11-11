@@ -86,7 +86,6 @@ export default function DetalheIdosoScreen({ navigation, route }: Props) {
 
       <ScrollView contentContainerStyle={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh(true)} tintColor={colors.coral} />}>
         {erro && elder ? <InlineNotice tone="warning" message={erro} /> : null}
-        {elder?.simulado ? <InlineNotice message="SIMULAÇÃO · Os sinais deste paciente são fictícios, para demonstração." /> : null}
         {loadState === 'loading' && !elder ? <LoadingState message={`Carregando os dados de ${nome}...`} /> : loadState === 'error' && !elder ? (
           <EmptyState icon="cloud-alert-outline" title="Dados indisponíveis" message={erro} actionLabel="Tentar novamente" onAction={() => { setLoadState('loading'); void refresh(true); }} />
         ) : <>
@@ -113,7 +112,7 @@ export default function DetalheIdosoScreen({ navigation, route }: Props) {
           {!profile ? <Text style={styles.emptyProfile}>O próprio paciente preenche estes dados em Meu perfil → Editar perfil.</Text> : null}
         </Card>
         <Card style={styles.header}>
-          <View style={styles.statusCopy}><Text style={styles.statusTitle}>Monitoramento ativo</Text><Text style={styles.subSaudacao}>Atualizado {leitura.ultimaAtualizacao}</Text></View>
+          <View style={styles.statusCopy}><Text style={styles.statusTitle}>Monitoramento ativo</Text><Text style={styles.subSaudacao}>Último registro: {leitura.ultimaAtualizacao}</Text></View>
           <StatusPill status={leitura.status} />
         </Card>
 

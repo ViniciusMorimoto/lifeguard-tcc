@@ -3,7 +3,7 @@
     "name": "LifeGuard",
     "slug": "lifeguard-tcc",
     "scheme": "lifeguard",
-    "version": "1.8.0",
+    "version": "1.11.0",
     "orientation": "portrait",
     "icon": "./assets/brand/app-icon.png",
     "userInterfaceStyle": "light",
@@ -14,14 +14,18 @@
     },
     "android": {
       "package": "com.mdantasc.lifeguard",
-      "versionCode": 11,
+      "versionCode": 14,
       "permissions": [
         "android.permission.ACCESS_WIFI_STATE",
         "android.permission.CHANGE_WIFI_STATE",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.CHANGE_NETWORK_STATE",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.NEARBY_WIFI_DEVICES"
+        "android.permission.NEARBY_WIFI_DEVICES",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT"
       ],
       "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
@@ -36,6 +40,7 @@
       "favicon": "./assets/brand/app-icon.png"
     },
     "plugins": [
+      "./plugins/with-ble-scan-permission",
       "expo-font",
       [
         "expo-secure-store",
@@ -78,15 +83,15 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "92c95f11-213c-4abb-80d7-530ac17bfcdb"
+        "projectId": "f6e3126a-f006-47d0-bb9a-017421f40858"
       }
     },
-    "owner": "mdantasc",
+    "owner": "viniciusmorimoto",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/92c95f11-213c-4abb-80d7-530ac17bfcdb",
+      "url": "https://u.expo.dev/f6e3126a-f006-47d0-bb9a-017421f40858",
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
       "requestHeaders": {

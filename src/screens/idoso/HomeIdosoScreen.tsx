@@ -77,12 +77,11 @@ export default function HomeIdosoScreen({ navigation }: Props) {
         <HomeHeader title={`Olá, ${(user?.nome ?? 'Usuário').split(' ')[0]}`} subtitle="Seu cuidado está sendo acompanhado" photo={user?.foto} accountType="idoso" onProfile={() => navigation.navigate('Perfil')} />
 
         {erro && leitura ? <InlineNotice tone="warning" message={erro} /> : null}
-        {leitura?.simulado ? <InlineNotice message="SIMULAÇÃO · Os sinais exibidos são fictícios, para demonstração." /> : null}
 
         {loadState === 'loading' && !leitura ? <LoadingState message="Carregando seu monitoramento..." /> : loadState === 'error' && !leitura ? (
           <EmptyState icon="cloud-alert-outline" title="Monitoramento indisponível" message={erro} actionLabel="Tentar novamente" onAction={() => { setLoadState('loading'); void refresh(true); }} />
         ) : <><Card style={styles.statusCard}>
-          <View style={styles.statusCopy}><Text style={styles.statusTitle}>{status === 'normal' ? 'Tudo bem por aqui' : status === 'sem_sinal' ? 'Aguardando sinal' : 'Atenção aos seus sinais'}</Text><Text style={styles.statusSubtitle}>Dados atualizados {leitura?.ultimaAtualizacao ?? 'assim que houver uma leitura'}</Text></View>
+          <View style={styles.statusCopy}><Text style={styles.statusTitle}>{status === 'normal' ? 'Tudo bem por aqui' : status === 'sem_sinal' ? 'Aguardando sinal' : 'Atenção aos seus sinais'}</Text><Text style={styles.statusSubtitle}>Último registro: {leitura?.ultimaAtualizacao ?? 'nenhum registro'}</Text></View>
           <StatusPill status={status} />
         </Card>
 
