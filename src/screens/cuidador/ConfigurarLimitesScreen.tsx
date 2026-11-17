@@ -12,6 +12,8 @@ import { useMonitoringStore } from '../../store/monitoringStore';
 import { useFocusEffect } from '@react-navigation/native';
 import { fetchLimits, saveLimits } from '../../services/monitoring';
 import { ApiError } from '../../services/api';
+import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ConfigurarLimites'>;
 
@@ -26,17 +28,25 @@ export default function ConfigurarLimitesScreen({ navigation, route }: Props) {
   const [temperaturaMax, setTemperaturaMax] = useState(String(savedLimits?.temperaturaMax ?? 37.8));
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(savedLimits ? 'ready' : 'loading');
 
-  useFocusEffect(useCallback(() => {
-    void fetchLimits(idosoId).then((limits) => {
+  const loadLimits = useCallback(async () => {
+    try {
+      const limits = await fetchLimits(idosoId);
       setLimits(idosoId, limits);
       setBatimentoMin(String(limits.batimentoMin));
       setBatimentoMax(String(limits.batimentoMax));
       setTemperaturaMin(String(limits.temperaturaMin));
       setTemperaturaMax(String(limits.temperaturaMax));
       setErro('');
-    }).catch((error) => setErro(error instanceof ApiError ? error.message : 'Não foi possível carregar os limites.'));
-  }, [idosoId, setLimits]));
+      setLoadState('ready');
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : 'Não foi possível carregar os limites.');
+      setLoadState('error');
+    }
+  }, [idosoId, setLimits]);
+
+  useFocusEffect(useCallback(() => { void loadLimits(); }, [loadLimits]));
 
   async function handleSalvar() {
     const values = [batimentoMin, batimentoMax, temperaturaMin, temperaturaMax].map((value) => Number(value.replace(',', '.')));
@@ -69,7 +79,10 @@ export default function ConfigurarLimitesScreen({ navigation, route }: Props) {
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-        <Text style={styles.subtitulo}>Definindo os alertas de {nome}</Text>
+        {loadState === 'loading' && !savedLimits ? <LoadingState message="Carregando limites atuais..." /> : loadState === 'error' && !savedLimits ? (
+          <EmptyState icon="cloud-alert-outline" title="Limites indisponíveis" message={erro} actionLabel="Tentar novamente" onAction={() => { setLoadState('loading'); void loadLimits(); }} />
+        ) : <>
+          <Text style={styles.subtitulo}>Definindo os alertas de {nome}</Text>
 
         <Card style={styles.card}>
           <Text style={styles.grupoLabel}>Batimento cardíaco (bpm)</Text>
@@ -89,6 +102,7 @@ export default function ConfigurarLimitesScreen({ navigation, route }: Props) {
 
         {erro ? <Text accessibilityRole="alert" style={styles.erro}>{erro}</Text> : null}
         <AppButton label="Salvar limites" icon="content-save-outline" onPress={handleSalvar} loading={loading} style={styles.save} />
+        </>}
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

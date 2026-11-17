@@ -7,7 +7,10 @@ import { Gender, LinkStatus, UserType } from '../src/generated/prisma/enums.js';
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: env.DATABASE_URL }) });
 
 async function main() {
-  const passwordHash = await hash('Teste123!', 12);
+  if (!env.DEMO_SEED_ENABLED || !env.DEMO_SEED_PASSWORD) {
+    throw new Error('Seed de demonstração desativado. Defina DEMO_SEED_ENABLED=true e DEMO_SEED_PASSWORD localmente.');
+  }
+  const passwordHash = await hash(env.DEMO_SEED_PASSWORD, 12);
 
   const caregiver = await prisma.user.upsert({
     where: { email: 'ana@lifeguard.test' },
@@ -92,8 +95,7 @@ async function main() {
   });
 
   console.log('Dados de demonstração criados.');
-  console.log('Cuidador: ana@lifeguard.test / Teste123!');
-  console.log('Paciente: maria@lifeguard.test / Teste123!');
+  console.log('Contas de demonstração: ana@lifeguard.test e maria@lifeguard.test.');
 }
 
 main()

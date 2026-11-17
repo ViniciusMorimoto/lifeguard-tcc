@@ -5,11 +5,29 @@ import { HttpError } from '../lib/http-error.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { sendPushToUsers } from '../services/push.js';
+import { createRateLimit } from '../middleware/rate-limit.js';
 
 const tokenSchema = z.string().trim().max(300).regex(/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/, 'Token push inválido.');
 
 export const notificationsRouter = Router();
 notificationsRouter.use(requireAuth);
+
+notificationsRouter.get('/entregas', async (req, res) => {
+  const deliveries = await prisma.pushDelivery.findMany({
+    where: { userId: req.auth!.userId }, orderBy: { createdAt: 'desc' }, take: 50,
+    select: { id: true, status: true, createdAt: true, checkedAt: true },
+  });
+  res.json({ entregas: deliveries.map((item) => ({
+    id: item.id, status: item.status, enviadaEm: item.createdAt, verificadaEm: item.checkedAt,
+  })) });
+});
+
+const pushTestRateLimit = createRateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 5,
+  prefix: 'push-test',
+  key: (req) => req.auth?.userId ?? req.ip ?? req.socket.remoteAddress ?? 'unknown',
+});
 
 function serializePreferences(preferences: { notifyHealthAlerts: boolean; notifyLinkUpdates: boolean }) {
   return {
@@ -67,7 +85,7 @@ notificationsRouter.delete('/token', async (req, res) => {
   res.status(204).send();
 });
 
-notificationsRouter.post('/teste', async (req, res) => {
+notificationsRouter.post('/teste', pushTestRateLimit, async (req, res) => {
   if (req.auth!.type === UserType.ELDER) {
     const patient = await prisma.user.findUnique({
       where: { id: req.auth!.userId },

@@ -27,13 +27,14 @@ export function serializeElderProfile(profile?: ElderProfile | null) {
 }
 
 export function serializeUser(
-  user: Pick<User, 'id' | 'name' | 'email' | 'phone' | 'type' | 'profilePhoto' | 'gender'>,
+  user: Pick<User, 'id' | 'name' | 'email' | 'phone' | 'type' | 'profilePhoto' | 'gender' | 'emailVerifiedAt'>,
   elderProfile?: ElderProfile | null,
 ) {
   return {
     id: user.id,
     nome: user.name,
     email: user.email,
+    emailVerificado: Boolean(user.emailVerifiedAt),
     telefone: user.phone,
     foto: user.profilePhoto,
     genero: serializeGender(user.gender),

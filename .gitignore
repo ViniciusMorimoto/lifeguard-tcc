@@ -36,7 +36,9 @@ yarn-error.*
 !.env.example
 .env*.local
 .secrets/
+/firmware/esp32_lifeguard/config.h
 /.tools/
+/.playwright-cli/
 /credentials.json
 /credentials/
 inst_user_settings.tmp
@@ -51,3 +53,4 @@ backend/src/generated/prisma/
 # generated native folders
 /ios
 /android
+/tmp/

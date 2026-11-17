@@ -3,6 +3,7 @@ export type ReadingInput = {
   temperature: number | null;
   valid: boolean;
   contactDetected: boolean;
+  timestamp?: Date;
 };
 
 export type AlertLimitsInput = {
@@ -16,6 +17,7 @@ export type MonitoringStatus = 'normal' | 'atencao' | 'alerta' | 'sem_sinal';
 
 export function classifyReading(reading: ReadingInput | null, limits: AlertLimitsInput): MonitoringStatus {
   if (!reading || !reading.valid || !reading.contactDetected) return 'sem_sinal';
+  if (reading.timestamp && Date.now() - reading.timestamp.getTime() > 90_000) return 'sem_sinal';
 
   const heartRateAlert = reading.heartRate !== null
     && (reading.heartRate < limits.heartRateMinimum || reading.heartRate > limits.heartRateMaximum);

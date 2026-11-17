@@ -1,0 +1,16 @@
+[Unit]
+Description=Monitoramento da infraestrutura do LifeGuard
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+SupplementaryGroups=docker
+EnvironmentFile=/home/ubuntu/lifeguard-tcc/backend/.env
+EnvironmentFile=-/etc/lifeguard-monitor.env
+Environment=LIFEGUARD_DISK_THRESHOLD=85
+ExecStart=/home/ubuntu/lifeguard-tcc/backend/ops/monitor-infrastructure.sh
+
+[Install]
+WantedBy=multi-user.target

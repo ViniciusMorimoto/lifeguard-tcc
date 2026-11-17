@@ -1,0 +1,74 @@
+name: Segurança contínua
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    name: Auditoria de dependências
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v6
+      - name: Preparar Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+      - name: Instalar dependências do aplicativo
+        run: npm ci
+      - name: Bloquear vulnerabilidades críticas no aplicativo
+        run: npm audit --omit=dev --audit-level=critical
+      - name: Instalar dependências do backend
+        working-directory: backend
+        run: npm ci
+      - name: Bloquear vulnerabilidades altas no backend
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
+  secrets:
+    name: Segredos no histórico
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Baixar todo o histórico
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Executar Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codeql:
+    name: CodeQL JavaScript e TypeScript
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      contents: read
+      actions: read
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v6
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - name: Analisar código
+        uses: github/codeql-action/analyze@v4

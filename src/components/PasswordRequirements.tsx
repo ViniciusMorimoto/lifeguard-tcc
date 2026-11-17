@@ -6,13 +6,14 @@ import { passwordRequirements } from '../utils/validation';
 export default function PasswordRequirements({ password }: { password: string }) {
   return (
     <View accessibilityLabel="Requisitos da senha" style={styles.wrapper}>
-      <Text style={styles.title}>Sua senha deve ter:</Text>
+      <Text accessibilityRole="header" style={styles.title}>Sua senha deve ter:</Text>
       <View style={styles.grid}>
         {passwordRequirements.map((requirement) => {
           const met = requirement.test(password);
           return (
-            <View key={requirement.key} style={styles.item}>
+            <View accessible accessibilityLabel={`${requirement.label}: ${met ? 'atendido' : 'pendente'}`} key={requirement.key} style={styles.item}>
               <MaterialCommunityIcons
+                accessible={false}
                 name={met ? 'check-circle' : 'circle-outline'}
                 size={17}
                 color={met ? colors.moss : colors.textSecondary}

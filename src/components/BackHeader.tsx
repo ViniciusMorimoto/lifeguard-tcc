@@ -14,12 +14,12 @@ export default function BackHeader({ title, onBack, rightIcon, onRightPress, rig
   return (
     <View style={styles.wrapper}>
       <Pressable accessibilityRole="button" accessibilityLabel="Voltar" onPress={onBack} hitSlop={8} style={styles.actionBtn}>
-        <MaterialCommunityIcons name="arrow-left" size={24} color={colors.ink} />
+        <MaterialCommunityIcons accessible={false} name="arrow-left" size={24} color={colors.ink} />
       </Pressable>
-      <Text numberOfLines={1} style={styles.title}>{title}</Text>
+      <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       {rightIcon && onRightPress ? (
         <Pressable accessibilityRole="button" accessibilityLabel={rightLabel ?? 'Ação'} onPress={onRightPress} hitSlop={8} style={styles.actionBtn}>
-          <MaterialCommunityIcons name={rightIcon} size={24} color={colors.ink} />
+          <MaterialCommunityIcons accessible={false} name={rightIcon} size={24} color={colors.ink} />
         </Pressable>
       ) : <View style={styles.spacer} />}
     </View>

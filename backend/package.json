@@ -11,7 +11,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node --test dist/src/domain/readings.test.js dist/src/services/push.test.js",
+    "test": "npm run build && node --test dist/src/domain/*.test.js dist/src/middleware/*.test.js dist/src/services/*.test.js",
+    "test:integration": "npm run build && node --test dist/src/integration/*.test.js",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
@@ -28,6 +29,7 @@
     "express": "^5.2.1",
     "helmet": "^8.3.0",
     "jose": "^6.2.10",
+    "nodemailer": "^10.0.3",
     "pg": "^8.23.0",
     "prisma": "^7.10.0",
     "zod": "^4.5.4"
@@ -36,13 +38,16 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.4.1",
+    "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.23.1",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "fast-uri": "3.1.6",
+    "deepmerge-ts": "8.0.2",
+    "fast-uri": "3.1.8",
     "mysql2": "3.23.1",
+    "proxy-addr": "2.0.8",
     "qs": "6.16.0"
   }
 }

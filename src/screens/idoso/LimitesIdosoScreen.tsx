@@ -13,6 +13,8 @@ import { useAuthStore } from '../../store/authStore';
 import { useFocusEffect } from '@react-navigation/native';
 import { fetchLimits } from '../../services/monitoring';
 import { ApiError } from '../../services/api';
+import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'LimitesIdoso'>;
 
@@ -21,19 +23,30 @@ export default function LimitesIdosoScreen({ navigation }: Props) {
   const limits = useMonitoringStore((state) => user ? state.limitsByElder[user.id] : undefined);
   const setLimits = useMonitoringStore((state) => state.setLimits);
   const [erro, setErro] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  useFocusEffect(useCallback(() => {
+  const loadLimits = useCallback(async () => {
     if (!user) return;
-    void fetchLimits(user.id)
-      .then((result) => { setLimits(user.id, result); setErro(''); })
-      .catch((error) => setErro(error instanceof ApiError ? error.message : 'Não foi possível carregar os limites.'));
-  }, [setLimits, user]));
+    setLoading(true);
+    try {
+      setLimits(user.id, await fetchLimits(user.id));
+      setErro('');
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : 'Não foi possível carregar os limites.');
+    } finally {
+      setLoading(false);
+    }
+  }, [setLimits, user]);
+
+  useFocusEffect(useCallback(() => { void loadLimits(); }, [loadLimits]));
 
   if (!limits) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <BackHeader title="Meus limites de alerta" onBack={() => navigation.goBack()} />
-        <View style={styles.loading}><Text style={styles.updated}>{erro || 'Carregando limites...'}</Text></View>
+        {loading ? <LoadingState message="Carregando limites de alerta..." /> : (
+          <EmptyState icon="cloud-alert-outline" title="Limites indisponíveis" message={erro || 'Não encontramos os limites de alerta.'} actionLabel="Tentar novamente" onAction={() => void loadLimits()} />
+        )}
       </SafeAreaView>
     );
   }
@@ -41,6 +54,7 @@ export default function LimitesIdosoScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <BackHeader title="Meus limites de alerta" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.container}>
+        {erro ? <InlineNotice tone="warning" message={erro} /> : null}
         <InlineNotice message="Para sua segurança, somente seus cuidadores podem alterar estes valores." />
         <Text style={styles.sectionTitle}>Faixas configuradas</Text>
         <LimitCard icon="heart-pulse" title="Batimento cardíaco" min={limits.batimentoMin} max={limits.batimentoMax} unit="bpm" color={colors.ember} />
@@ -79,5 +93,4 @@ const styles = StyleSheet.create({
   unit: { fontFamily: fonts.body, fontSize: 13, color: colors.textSecondary },
   divider: { width: 1, backgroundColor: colors.border, marginHorizontal: 18 },
   updated: { fontFamily: fonts.body, fontSize: 13, lineHeight: 19, color: colors.textSecondary, textAlign: 'center', marginTop: 6 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
 });

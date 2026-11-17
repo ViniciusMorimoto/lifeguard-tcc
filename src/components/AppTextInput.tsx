@@ -22,8 +22,9 @@ export default function AppTextInput({ label, style, error, helperText, required
       <Text style={styles.label}>{label}{required ? ' *' : ''}</Text>
       <View style={[styles.inputShell, focused && styles.inputFocused, error && styles.inputError, !editable && styles.disabled]}>
         <TextInput
-          accessibilityLabel={label}
-          accessibilityHint={error ?? helperText}
+          accessibilityLabel={`${label}${required ? ', obrigatório' : ''}`}
+          accessibilityHint={error ? `Erro: ${error}` : helperText}
+          accessibilityState={{ disabled: !editable }}
           placeholderTextColor={colors.textSecondary}
           selectionColor={colors.coral}
           editable={editable}
@@ -41,11 +42,11 @@ export default function AppTextInput({ label, style, error, helperText, required
             onPress={onRightIconPress}
             style={({ pressed }) => [styles.rightIcon, pressed && styles.pressed]}
           >
-            <MaterialCommunityIcons name={rightIcon} size={23} color={colors.textSecondary} />
+            <MaterialCommunityIcons accessible={false} name={rightIcon} size={23} color={colors.textSecondary} />
           </Pressable>
         ) : null}
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : helperText ? <Text style={styles.helper}>{helperText}</Text> : null}
+      {error ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : helperText ? <Text style={styles.helper}>{helperText}</Text> : null}
     </View>
   );
 }

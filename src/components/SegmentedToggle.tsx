@@ -6,13 +6,14 @@ type Props<T extends string> = { value: T; onChange: (value: T) => void; options
 
 export default function SegmentedToggle<T extends string>({ value, onChange, options, disabled = false }: Props<T>) {
   return (
-    <View style={styles.wrapper}>
+    <View accessibilityRole="tablist" style={styles.wrapper}>
       {options.map((opt) => {
         const active = opt.value === value;
         return (
           <Pressable
             key={opt.value}
             accessibilityRole="tab"
+            accessibilityLabel={opt.label}
             accessibilityState={{ selected: active, disabled }}
             disabled={disabled}
             onPress={() => onChange(opt.value)}

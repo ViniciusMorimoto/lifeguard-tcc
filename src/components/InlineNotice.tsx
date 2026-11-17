@@ -14,8 +14,8 @@ const config: Record<Tone, { bg: string; text: string; icon: keyof typeof Materi
 export default function InlineNotice({ message, tone = 'info' }: { message: string; tone?: Tone }) {
   const item = config[tone];
   return (
-    <View accessibilityRole="alert" style={[styles.notice, { backgroundColor: item.bg }]}>
-      <MaterialCommunityIcons name={item.icon} size={22} color={item.text} />
+    <View accessibilityRole="alert" accessibilityLiveRegion={tone === 'danger' ? 'assertive' : 'polite'} style={[styles.notice, { backgroundColor: item.bg }]}>
+      <MaterialCommunityIcons accessible={false} name={item.icon} size={22} color={item.text} />
       <Text style={[styles.message, { color: item.text }]}>{message}</Text>
     </View>
   );

@@ -12,7 +12,7 @@ import {
   updateNotificationPreferences,
   type NotificationPreferences,
 } from '../services/notifications';
-import { ApiError } from '../services/api';
+import { apiRequest, ApiError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import OptionCheckbox from './OptionCheckbox';
 
@@ -24,7 +24,8 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
 export default function PushNotificationsCard() {
   const userType = useAuthStore((state) => state.user?.tipo);
   const [status, setStatus] = useState<PermissionStatus | 'unknown'>('unknown');
-  const [loadingAction, setLoadingAction] = useState<'enable' | 'test' | null>(null);
+  const [loadingAction, setLoadingAction] = useState<'enable' | 'test' | 'deliveries' | null>(null);
+  const [deliverySummary, setDeliverySummary] = useState<string | null>(null);
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
   const [loadingPreferences, setLoadingPreferences] = useState(true);
   const [error, setError] = useState('');
@@ -89,6 +90,23 @@ export default function PushNotificationsCard() {
     }
   }
 
+  async function checkDeliveries() {
+    setLoadingAction('deliveries');
+    setError('');
+    try {
+      const { entregas } = await apiRequest<{ entregas: { status: string }[] }>('/notificacoes/entregas');
+      if (!entregas.length) setDeliverySummary('Ainda não há envios registrados para sua conta.');
+      else {
+        const count = (status: string) => entregas.filter((item) => item.status === status).length;
+        setDeliverySummary(`Últimos ${entregas.length} envios: ${count('accepted')} encaminhados, ${count('pending')} aguardando confirmação, ${count('failed')} com falha e ${count('unknown')} sem confirmação.`);
+      }
+    } catch (requestError) {
+      setError(requestError instanceof ApiError && requestError.status === 404
+        ? 'O histórico de entrega estará disponível após a atualização do servidor.'
+        : 'Não foi possível consultar as entregas agora. Tente novamente.');
+    } finally { setLoadingAction(null); }
+  }
+
   const enabled = status === 'granted';
   const isPatient = userType === 'idoso';
   return (
@@ -102,6 +120,11 @@ export default function PushNotificationsCard() {
       {enabled && !isPatient ? <AppButton label="Testar neste aparelho" icon="bell-ring-outline" variant="secondary" onPress={() => void test()} loading={loadingAction === 'test'} disabled={loadingAction !== null} /> : null}
       {isPatient ? <AppButton label="Enviar teste aos cuidadores" icon="bell-ring-outline" variant="secondary" style={!enabled ? styles.secondaryAction : undefined} onPress={() => void test()} loading={loadingAction === 'test'} disabled={loadingAction !== null} /> : null}
       {status === 'denied' ? <AppButton label="Abrir configurações do aparelho" variant="text" onPress={() => void Linking.openSettings()} disabled={loadingAction !== null} /> : null}
+      <AppButton label="Consultar entregas da minha conta" variant="text" onPress={() => void checkDeliveries()} loading={loadingAction === 'deliveries'} disabled={loadingAction !== null} />
+      {deliverySummary ? <View accessibilityLiveRegion="polite">
+        <Text style={styles.description}>{deliverySummary}</Text>
+        <Text style={styles.preferencesHelper}>A confirmação pode levar cerca de 15 minutos. Encaminhado significa aceito pelo serviço de notificações do celular; não comprova que a pessoa viu o aviso.</Text>
+      </View> : null}
       <View style={styles.preferences}>
         <Text style={styles.preferencesTitle}>Quero receber</Text>
         <OptionCheckbox

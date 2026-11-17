@@ -54,8 +54,14 @@ enum AlertStatus {
 }
 
 enum AggregationPeriod {
+  FIVE_MINUTES
   HOUR
   DAY
+}
+
+enum AccountCodeType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
 }
 
 model User {
@@ -70,6 +76,8 @@ model User {
   termsAcceptedAt        DateTime?
   privacyAcceptedAt      DateTime?
   legalDocumentVersion   String?
+  emailVerifiedAt        DateTime?
+  sessionVersion         Int                  @default(0)
   notifyHealthAlerts     Boolean              @default(true)
   notifyLinkUpdates      Boolean              @default(true)
   createdAt              DateTime             @default(now())
@@ -83,7 +91,52 @@ model User {
   alerts                 Alert[]
   notificationRecipients NotificationSent[]   @relation("NotificationRecipient")
   pushTokens             PushToken[]
+  pushDeliveries         PushDelivery[]
+  sessions               AuthSession[]
+  accountCodes           AccountCode[]
   linkCodes              ElderLinkCode[]
+  patientChanges         PatientChangeLog[] @relation("PatientChangeSubject")
+  authoredPatientChanges PatientChangeLog[] @relation("PatientChangeAuthor")
+}
+
+model PatientChangeLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  patientId     String   @db.Uuid
+  changedById   String?  @db.Uuid
+  category      String
+  changedFields String[]
+  createdAt     DateTime @default(now())
+  patient       User     @relation("PatientChangeSubject", fields: [patientId], references: [id], onDelete: Cascade)
+  changedBy     User?    @relation("PatientChangeAuthor", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([patientId, createdAt(sort: Desc)])
+}
+
+model AccountCode {
+  id        String          @id @default(uuid()) @db.Uuid
+  userId    String          @db.Uuid
+  type      AccountCodeType
+  codeHash  String
+  attempts  Int             @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime        @default(now())
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, usedAt, expiresAt])
+}
+
+model AuthSession {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  sessionVersion Int
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sessionVersion, revokedAt, expiresAt])
 }
 
 model ElderProfile {
@@ -133,6 +186,8 @@ model Device {
   active       Boolean             @default(true)
   pairedAt     DateTime            @default(now())
   lastSeenAt   DateTime?
+  credentialHash String?
+  isSimulator Boolean @default(false)
   elder        User                @relation(fields: [elderId], references: [id], onDelete: Cascade)
   readings     Reading[]
   aggregates   AggregatedReading[]
@@ -151,9 +206,12 @@ model Reading {
   contactDetected Boolean       @default(true)
   valid           Boolean       @default(true)
   invalidReason   String?
+  sampleId        String?       @db.Uuid
+  payloadHash     String?
   device          Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@index([deviceId, timestamp(sort: Desc)])
+  @@unique([deviceId, sampleId])
   @@index([timestamp])
 }
 
@@ -197,11 +255,24 @@ model Alert {
   timestamp     DateTime           @default(now())
   status        AlertStatus        @default(NEW)
   resolvedAt    DateTime?
+  signalRecoveredAt DateTime?
   elder         User               @relation(fields: [elderId], references: [id], onDelete: Cascade)
   notifications NotificationSent[]
+  deviceDispatch DeviceAlertDispatch?
 
   @@index([elderId, timestamp(sort: Desc)])
   @@index([status, timestamp(sort: Desc)])
+}
+
+model DeviceAlertDispatch {
+  id        String    @id @default(uuid()) @db.Uuid
+  alertId   String    @unique @db.Uuid
+  attempts  Int       @default(0)
+  nextAt    DateTime  @default(now())
+  sentAt    DateTime?
+  alert     Alert     @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([sentAt, nextAt])
 }
 
 model NotificationSent {
@@ -226,6 +297,24 @@ model PushToken {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries PushDelivery[]
 
   @@index([userId, active])
+}
+
+model PushDelivery {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  pushTokenId  String?   @db.Uuid
+  providerId   String?   @unique
+  status       String    @default("pending")
+  errorCode    String?
+  createdAt    DateTime  @default(now())
+  checkedAt    DateTime?
+  nextCheckAt  DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushToken    PushToken? @relation(fields: [pushTokenId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextCheckAt])
+  @@index([userId, createdAt])
 }

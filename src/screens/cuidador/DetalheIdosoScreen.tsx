@@ -13,10 +13,12 @@ import Card from '../../components/Card';
 import { useMonitoringStore } from '../../store/monitoringStore';
 import { useFocusEffect } from '@react-navigation/native';
 import { fetchElder } from '../../services/monitoring';
-import { apiRequest, ApiError } from '../../services/api';
+import { apiRequest, ApiError, formatDateTime } from '../../services/api';
 import InlineNotice from '../../components/InlineNotice';
 import { formatPhone } from '../../utils/phone';
 import { formatGender } from '../../components/GenderSelector';
+import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DetalheIdoso'>;
 
@@ -28,6 +30,7 @@ export default function DetalheIdosoScreen({ navigation, route }: Props) {
   const removeElder = useMonitoringStore((state) => state.removeElder);
   const [refreshing, setRefreshing] = useState(false);
   const [erro, setErro] = useState('');
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const leitura = elder ?? { id: idosoId, nome, batimento: null, temperatura: null, status: 'sem_sinal' as const, ultimaAtualizacao: 'indisponível', telefone: '' };
   const profile = leitura.perfilIdoso;
   const emergencyContact = profile?.contatoEmergenciaNome && profile?.contatoEmergenciaTelefone
@@ -40,9 +43,13 @@ export default function DetalheIdosoScreen({ navigation, route }: Props) {
       const result = await fetchElder(idosoId);
       upsertElder(result.elder);
       if (result.limits) setLimits(idosoId, result.limits);
-      setErro('');
+      setErro(result.cache.fromCache
+        ? `Sem conexão. Exibindo os últimos dados salvos em ${formatDateTime(result.cache.savedAt!)}.`
+        : '');
+      setLoadState('ready');
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : 'Não foi possível atualizar os dados.');
+      setLoadState('error');
     } finally {
       setRefreshing(false);
     }
@@ -78,7 +85,10 @@ export default function DetalheIdosoScreen({ navigation, route }: Props) {
       <BackHeader title={nome} onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh(true)} tintColor={colors.coral} />}>
-        {erro ? <InlineNotice tone="warning" message={erro} /> : null}
+        {erro && elder ? <InlineNotice tone="warning" message={erro} /> : null}
+        {loadState === 'loading' && !elder ? <LoadingState message={`Carregando os dados de ${nome}...`} /> : loadState === 'error' && !elder ? (
+          <EmptyState icon="cloud-alert-outline" title="Dados indisponíveis" message={erro} actionLabel="Tentar novamente" onAction={() => { setLoadState('loading'); void refresh(true); }} />
+        ) : <>
         <Card style={styles.patientCard}>
           <View style={styles.identityRow}>
             <View style={styles.avatar}>
@@ -102,7 +112,7 @@ export default function DetalheIdosoScreen({ navigation, route }: Props) {
           {!profile ? <Text style={styles.emptyProfile}>O próprio paciente preenche estes dados em Meu perfil → Editar perfil.</Text> : null}
         </Card>
         <Card style={styles.header}>
-          <View style={styles.statusCopy}><Text style={styles.statusTitle}>Monitoramento ativo</Text><Text style={styles.subSaudacao}>Atualizado {leitura.ultimaAtualizacao}</Text></View>
+          <View style={styles.statusCopy}><Text style={styles.statusTitle}>Monitoramento ativo</Text><Text style={styles.subSaudacao}>Último registro: {leitura.ultimaAtualizacao}</Text></View>
           <StatusPill status={leitura.status} />
         </Card>
 
@@ -124,8 +134,16 @@ export default function DetalheIdosoScreen({ navigation, route }: Props) {
           onPress={() => navigation.navigate('ConfigurarLimites', { idosoId, nome })}
           style={styles.action}
         />
+        <AppButton
+          label="Ver alterações do paciente"
+          icon="history"
+          variant="secondary"
+          onPress={() => navigation.navigate('HistoricoAlteracoes', { idosoId, nome })}
+          style={styles.action}
+        />
         <AppButton label={`Falar com ${nome.split(' ')[0]}`} icon="phone-outline" variant="text" onPress={() => navigation.navigate('ContatoRapido', { idosoId, nome, telefone: leitura.telefone })} />
         <AppButton label="Remover dos meus cuidados" icon="account-remove-outline" variant="danger" onPress={handleRemove} style={styles.removeButton} />
+        </>}
       </ScrollView>
     </SafeAreaView>
   );

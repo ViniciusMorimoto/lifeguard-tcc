@@ -1,0 +1,8 @@
+title = "LifeGuard secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "A chave Firebase Android identifica o app cliente e não autoriza acesso aos dados."
+paths = ['''(^|/)google-services\.json$''']

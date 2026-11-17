@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Linking, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Linking, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -14,6 +14,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest, ApiError } from '../../services/api';
 import { fetchCaregivers } from '../../services/monitoring';
 import { formatPhone, phoneUri } from '../../utils/phone';
+import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Cuidadores'>;
 
@@ -24,12 +26,25 @@ export default function CuidadoresScreen({ navigation }: Props) {
   const setCaregivers = useMonitoringStore((state) => state.setCaregivers);
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [refreshing, setRefreshing] = useState(false);
 
-  useFocusEffect(useCallback(() => {
-    void fetchCaregivers()
-      .then((result) => { setCaregivers(result); setErro(''); })
-      .catch((error) => setErro(error instanceof ApiError ? error.message : 'Não foi possível carregar os cuidadores.'));
-  }, [setCaregivers]));
+  const loadCaregivers = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    try {
+      const result = await fetchCaregivers();
+      setCaregivers(result);
+      setErro('');
+      setLoadState('ready');
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : 'Não foi possível carregar os cuidadores.');
+      setLoadState('error');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [setCaregivers]);
+
+  useFocusEffect(useCallback(() => { void loadCaregivers(); }, [loadCaregivers]));
 
   async function handleGerarCodigo() {
     setLoading(true);
@@ -75,9 +90,9 @@ export default function CuidadoresScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <BackHeader title="Cuidadores" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadCaregivers(true)} tintColor={colors.coral} />}>
         <InlineNotice message="Somente pessoas com um código válido podem se vincular à sua conta." />
-        {erro ? <InlineNotice tone="warning" message={erro} /> : null}
+        {erro && cuidadores.length > 0 ? <InlineNotice tone="warning" message={erro} /> : null}
         <AppButton label={codigo ? 'Gerar novo código' : 'Gerar código de vínculo'} icon="account-plus-outline" onPress={handleGerarCodigo} loading={loading} style={styles.generateButton} />
 
         {codigo ? (
@@ -88,22 +103,24 @@ export default function CuidadoresScreen({ navigation }: Props) {
           </Card>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Vinculados a você</Text>
+        <Text accessibilityRole="header" style={styles.sectionTitle}>Vinculados a você</Text>
 
-        {cuidadores.length === 0 ? <Text style={styles.empty}>Nenhum cuidador vinculado no momento.</Text> : cuidadores.map((cuidador) => (
+        {loadState === 'loading' && cuidadores.length === 0 ? <LoadingState message="Carregando cuidadores..." /> : loadState === 'error' && cuidadores.length === 0 ? (
+          <EmptyState icon="cloud-alert-outline" title="Cuidadores indisponíveis" message={erro} actionLabel="Tentar novamente" onAction={() => { setLoadState('loading'); void loadCaregivers(); }} />
+        ) : cuidadores.length === 0 ? <EmptyState icon="account-group-outline" title="Nenhum cuidador vinculado" message="Gere um código temporário para adicionar uma pessoa de confiança." /> : cuidadores.map((cuidador) => (
           <Card key={cuidador.id} style={styles.cuidadorCard}>
             <View style={styles.avatar}>
-              {cuidador.foto ? <Image source={{ uri: cuidador.foto }} style={styles.avatarImage} /> : <Text style={styles.avatarLabel}>{cuidador.nome.charAt(0)}</Text>}
+              {cuidador.foto ? <Image accessible accessibilityLabel={`Foto de ${cuidador.nome}`} source={{ uri: cuidador.foto }} style={styles.avatarImage} /> : <Text accessibilityLabel={`Foto não cadastrada. Inicial ${cuidador.nome.charAt(0)}`} style={styles.avatarLabel}>{cuidador.nome.charAt(0)}</Text>}
             </View>
             <View style={styles.cuidadorInfo}>
               <Text style={styles.cuidadorNome}>{cuidador.nome}</Text>
               <Text style={styles.cuidadorDesde}>{formatPhone(cuidador.telefone) || 'Telefone não informado'} · {cuidador.vinculadoDesde}</Text>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel={`Ligar para ${cuidador.nome}`} onPress={() => handleLigar(cuidador.nome, cuidador.telefone)} hitSlop={8} style={styles.callButton}>
-              <MaterialCommunityIcons name="phone-outline" size={22} color={colors.coral} />
+              <MaterialCommunityIcons accessible={false} name="phone-outline" size={22} color={colors.coral} />
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel={`Remover ${cuidador.nome}`} onPress={() => handleRemover(cuidador.id, cuidador.nome)} hitSlop={8} style={styles.removeButton}>
-              <MaterialCommunityIcons name="close-circle-outline" size={22} color={colors.ember} />
+              <MaterialCommunityIcons accessible={false} name="close-circle-outline" size={22} color={colors.ember} />
             </Pressable>
           </Card>
         ))}
@@ -128,7 +145,6 @@ const styles = StyleSheet.create({
   cuidadorInfo: { flex: 1 },
   cuidadorNome: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.ink },
   cuidadorDesde: { fontFamily: fonts.body, fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  callButton: { width: 44, height: 48, alignItems: 'center', justifyContent: 'center' },
+  callButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   removeButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  empty: { fontFamily: fonts.body, fontSize: 15, lineHeight: 22, color: colors.textSecondary, textAlign: 'center', paddingVertical: 32 },
 });

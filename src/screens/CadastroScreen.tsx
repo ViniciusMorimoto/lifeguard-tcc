@@ -21,7 +21,7 @@ import { isStrongPassword, isValidEmail, passwordValidationMessage } from '../ut
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Cadastro'>;
 
-export default function CadastroScreen({ navigation }: Props) {
+export default function CadastroScreen({ navigation, route }: Props) {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -31,7 +31,7 @@ export default function CadastroScreen({ navigation }: Props) {
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
-  const [tipoConta, setTipoConta] = useState<'idoso' | 'cuidador'>('idoso');
+  const [tipoConta, setTipoConta] = useState<'idoso' | 'cuidador'>(route.params?.tipoConta ?? 'idoso');
   const [aceitouDocumentos, setAceitouDocumentos] = useState(false);
   const [consentError, setConsentError] = useState(false);
   const [erro, setErro] = useState('');
@@ -67,7 +67,7 @@ export default function CadastroScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      const response = await apiRequest<{ token: string; usuario: NonNullable<ReturnType<typeof useAuthStore.getState>['user']> }>('/auth/cadastro', {
+      const response = await apiRequest<{ token: string; usuario: NonNullable<ReturnType<typeof useAuthStore.getState>['user']>; emailConfirmacaoEnviado: boolean }>('/auth/cadastro', {
         method: 'POST',
         body: JSON.stringify({
           nome: nome.trim(),
@@ -82,7 +82,12 @@ export default function CadastroScreen({ navigation }: Props) {
       });
       setSession(response.token, response.usuario);
       setErro('');
-      Alert.alert('Conta criada', 'Seu cadastro foi concluído com sucesso.');
+      Alert.alert(
+        'Conta criada',
+        response.emailConfirmacaoEnviado
+          ? 'Seu cadastro foi concluído. Enviamos um código para confirmar seu e-mail; você pode informá-lo em Conta e segurança.'
+          : 'Seu cadastro foi concluído. Você poderá solicitar a confirmação do e-mail em Conta e segurança.',
+      );
       navigation.reset({ index: 0, routes: [{ name: tipoConta === 'idoso' ? 'HomeIdoso' : 'HomeCuidador' }] });
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : 'Não foi possível criar sua conta agora.');
@@ -128,7 +133,7 @@ export default function CadastroScreen({ navigation }: Props) {
             onChangeText={(value) => { setSenha(value); setErro(''); }}
             editable={!loading}
             secureTextEntry={!mostrarSenha}
-            rightIcon={mostrarSenha ? 'eye-off-outline' : 'eye-outline'}
+            rightIcon={mostrarSenha ? 'eye-outline' : 'eye-off-outline'}
             rightIconLabel={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
             onRightIconPress={() => setMostrarSenha((value) => !value)}
             autoComplete="new-password"
@@ -143,7 +148,7 @@ export default function CadastroScreen({ navigation }: Props) {
             onChangeText={(value) => { setConfirmarSenha(value); setErro(''); }}
             editable={!loading}
             secureTextEntry={!mostrarConfirmacao}
-            rightIcon={mostrarConfirmacao ? 'eye-off-outline' : 'eye-outline'}
+            rightIcon={mostrarConfirmacao ? 'eye-outline' : 'eye-off-outline'}
             rightIconLabel={mostrarConfirmacao ? 'Ocultar confirmação da senha' : 'Mostrar confirmação da senha'}
             onRightIconPress={() => setMostrarConfirmacao((value) => !value)}
             placeholder="Repita sua senha"
@@ -166,7 +171,7 @@ export default function CadastroScreen({ navigation }: Props) {
         {erro ? <Text accessibilityRole="alert" style={styles.erro}>{erro}</Text> : null}
 
         <AppButton label="Criar minha conta" icon="account-plus-outline" onPress={handleCadastro} loading={loading} />
-        <AppButton label="Já tenho conta" variant="text" onPress={() => navigation.navigate('Login')} disabled={loading} />
+        <AppButton label="Já tenho conta" variant="text" onPress={() => navigation.navigate('Login', { tipoConta })} disabled={loading} />
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
+import { useNotificationResponse } from '../services/useNotificationResponse';
 import type { RootStackParamList } from './types';
 import LoginScreen from '../screens/LoginScreen';
 import CadastroScreen from '../screens/CadastroScreen';
@@ -14,6 +15,7 @@ import SemConexaoScreen from '../screens/SemConexaoScreen';
 import HomeIdosoScreen from '../screens/idoso/HomeIdosoScreen';
 import HomeCuidadorScreen from '../screens/cuidador/HomeCuidadorScreen';
 import HistoricoScreen from '../screens/idoso/HistoricoScreen';
+import HistoricoAlteracoesScreen from '../screens/HistoricoAlteracoesScreen';
 import MeuDispositivoScreen from '../screens/idoso/MeuDispositivoScreen';
 import CuidadoresScreen from '../screens/idoso/CuidadoresScreen';
 import LimitesIdosoScreen from '../screens/idoso/LimitesIdosoScreen';
@@ -32,7 +34,7 @@ const navigationRef = createNavigationContainerRef<RootStackParamList>();
 export default function AppNavigator() {
   const user = useAuthStore((state) => state.user);
   const pendingResponse = useRef<Notifications.NotificationResponse | null>(null);
-  const lastHandledId = useRef<string | null>(null);
+  const notificationResponse = useNotificationResponse();
 
   const handleNotificationResponse = useCallback((response: Notifications.NotificationResponse) => {
     if (!navigationRef.isReady() || !user) {
@@ -40,8 +42,6 @@ export default function AppNavigator() {
       return;
     }
 
-    const notificationId = response.notification.request.identifier;
-    if (lastHandledId.current === notificationId) return;
     const data = response.notification.request.content.data;
     const type = typeof data.tipo === 'string' ? data.tipo : '';
     let handled = false;
@@ -61,24 +61,25 @@ export default function AppNavigator() {
     }
 
     if (handled) {
-      lastHandledId.current = notificationId;
       pendingResponse.current = null;
       void Notifications.clearLastNotificationResponseAsync();
     }
   }, [user]);
 
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
-    void Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response) handleNotificationResponse(response);
-    });
-    return () => subscription.remove();
-  }, [handleNotificationResponse]);
+    if (notificationResponse) handleNotificationResponse(notificationResponse);
+  }, [handleNotificationResponse, notificationResponse]);
 
   const handleNavigationReady = useCallback(() => {
     const response = pendingResponse.current;
     if (response) handleNotificationResponse(response);
   }, [handleNotificationResponse]);
+
+  useEffect(() => {
+    if (!user && navigationRef.isReady() && navigationRef.getCurrentRoute()?.name !== 'Login') {
+      navigationRef.resetRoot({ index: 0, routes: [{ name: 'Login' }] });
+    }
+  }, [user]);
 
   return (
     <NavigationContainer ref={navigationRef} onReady={handleNavigationReady}>
@@ -100,6 +101,7 @@ export default function AppNavigator() {
         <Stack.Screen name="ContaSeguranca" component={ContaSegurancaScreen} />
         <Stack.Screen name="AjudaSobre" component={AjudaSobreScreen} />
         <Stack.Screen name="Historico" component={HistoricoScreen} />
+        <Stack.Screen name="HistoricoAlteracoes" component={HistoricoAlteracoesScreen} />
         <Stack.Screen name="MeuDispositivo" component={MeuDispositivoScreen} />
         <Stack.Screen name="ParearDispositivo" component={ParearDispositivoScreen} />
         <Stack.Screen name="Cuidadores" component={CuidadoresScreen} />

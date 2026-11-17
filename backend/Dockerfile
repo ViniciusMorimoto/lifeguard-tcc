@@ -25,11 +25,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/prisma.config.ts ./prisma.config.ts
+COPY --chown=node:node --from=build /app/package.json ./package.json
+COPY --chown=node:node --from=build /app/node_modules ./node_modules
+COPY --chown=node:node --from=build /app/dist ./dist
+COPY --chown=node:node --from=build /app/prisma ./prisma
+COPY --chown=node:node --from=build /app/prisma.config.ts ./prisma.config.ts
 
 EXPOSE 3333
+USER node
 CMD ["sh", "-c", "npm run db:deploy && npm start"]

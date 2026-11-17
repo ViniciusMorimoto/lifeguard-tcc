@@ -7,9 +7,19 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { serializeUser } from '../serializers.js';
 import { sendPushToUsers } from '../services/push.js';
+import { log, safeErrorFields } from '../lib/logger.js';
+import { createRateLimit } from '../middleware/rate-limit.js';
 
 export const linksRouter = Router();
 linksRouter.use(requireAuth);
+
+const generateCodeRateLimit = createRateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  prefix: 'link-code-generate',
+  key: (req) => req.auth?.userId ?? req.ip ?? req.socket.remoteAddress ?? 'unknown',
+});
+const redeemCodeRateLimit = createRateLimit({ windowMs: 15 * 60 * 1000, max: 10, prefix: 'link-code-redeem' });
 
 linksRouter.get('/', async (req, res) => {
   if (req.auth!.type === UserType.ELDER) {
@@ -42,7 +52,7 @@ linksRouter.get('/', async (req, res) => {
   });
 });
 
-linksRouter.post('/codigo', async (req, res) => {
+linksRouter.post('/codigo', generateCodeRateLimit, async (req, res) => {
   if (req.auth!.type !== UserType.ELDER) {
     throw new HttpError(403, 'Somente o paciente pode gerar um código de vínculo.', 'ELDER_ONLY');
   }
@@ -72,7 +82,7 @@ linksRouter.post('/codigo', async (req, res) => {
   res.status(201).json({ codigo: created.code, expiraEm: created.expiresAt });
 });
 
-linksRouter.post('/', async (req, res) => {
+linksRouter.post('/', redeemCodeRateLimit, async (req, res) => {
   if (req.auth!.type !== UserType.CAREGIVER) {
     throw new HttpError(403, 'Somente cuidadores podem usar um código de vínculo.', 'CAREGIVER_ONLY');
   }
@@ -86,6 +96,13 @@ linksRouter.post('/', async (req, res) => {
       throw new HttpError(400, 'Não é possível vincular a própria conta.', 'SELF_LINK');
     }
 
+    // Claim atomically: two requests must never redeem the same code.
+    const claimed = await tx.elderLinkCode.updateMany({
+      where: { id: code.id, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    });
+    if (claimed.count !== 1) throw new HttpError(400, 'Código inválido ou expirado.', 'INVALID_LINK_CODE');
+
     const saved = await tx.caregiverElderLink.upsert({
       where: {
         caregiverId_elderId: { caregiverId: req.auth!.userId, elderId: code.elderId },
@@ -94,7 +111,6 @@ linksRouter.post('/', async (req, res) => {
       update: { status: LinkStatus.ACTIVE },
       include: { elder: true },
     });
-    await tx.elderLinkCode.update({ where: { id: code.id }, data: { usedAt: new Date() } });
     return saved;
   });
 
@@ -105,7 +121,7 @@ linksRouter.post('/', async (req, res) => {
     title: 'Novo cuidador vinculado',
     body: 'Um cuidador usou seu código e agora faz parte da sua rede de cuidado.',
     data: { tipo: 'novo_vinculo' },
-  }, undefined, 'link_update').catch((error) => console.error('Falha ao enviar notificação de vínculo:', error));
+  }, undefined, 'link_update').catch((error) => log('error', 'link_notification_failed', safeErrorFields(error)));
 });
 
 linksRouter.delete('/:vinculoId', async (req, res) => {

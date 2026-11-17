@@ -5,7 +5,7 @@ import { colors, fonts } from '../theme/theme';
 export default function SectionHeader({ title, actionLabel, onAction }: { title: string; actionLabel?: string; onAction?: () => void }) {
   return (
     <View style={styles.row}>
-      <Text style={styles.title}>{title}</Text>
+      <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       {actionLabel && onAction ? <AppButton label={actionLabel} variant="text" onPress={onAction} style={styles.action} /> : null}
     </View>
   );

@@ -51,6 +51,8 @@ export default function PerfilScreen({ navigation }: Props) {
   const [editing, setEditing] = useState(false);
   const [nome, setNome] = useState(user?.nome ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
+  const [senhaAtualEmail, setSenhaAtualEmail] = useState('');
+  const [mostrarSenhaEmail, setMostrarSenhaEmail] = useState(false);
   const [telefone, setTelefone] = useState(phoneNationalValue(user?.telefone));
   const [paisTelefone, setPaisTelefone] = useState<CountryCode>(phoneCountry(user?.telefone));
   const [foto, setFoto] = useState<string | null>(user?.foto ?? null);
@@ -85,19 +87,11 @@ export default function PerfilScreen({ navigation }: Props) {
     || paisContato !== phoneCountry(user?.perfilIdoso?.contatoEmergenciaTelefone)
   );
 
-  usePreventRemove(hasUnsavedChanges, ({ data }) => {
-    Alert.alert(
-      'Alterações não salvas',
-      'Você fez alterações no perfil. Deseja descartá-las e sair?',
-      [
-        { text: 'Continuar editando', style: 'cancel' },
-        { text: 'Descartar alterações', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
-      ],
-    );
-  });
+  usePreventRemove(editing, () => handleCancelEditing());
 
   function resetForm() {
     setNome(user?.nome ?? ''); setEmail(user?.email ?? ''); setTelefone(phoneNationalValue(user?.telefone)); setPaisTelefone(phoneCountry(user?.telefone)); setFoto(user?.foto ?? null); setGenero(user?.genero ?? null);
+    setSenhaAtualEmail(''); setMostrarSenhaEmail(false);
     setDataNascimento(isoToBr(user?.perfilIdoso?.dataNascimento)); setTipoSanguineo(user?.perfilIdoso?.tipoSanguineo ?? '');
     setAlergias(user?.perfilIdoso?.alergias ?? ''); setMedicamentos(user?.perfilIdoso?.medicamentos ?? '');
     setCondicoesMedicas(user?.perfilIdoso?.condicoesMedicas ?? ''); setObservacoes(user?.perfilIdoso?.observacoesImportantes ?? '');
@@ -126,8 +120,13 @@ export default function PerfilScreen({ navigation }: Props) {
   }
 
   async function handleSave() {
+    const emailNormalizado = email.trim().toLowerCase();
+    const emailAlterado = emailNormalizado !== (user?.email ?? '').toLowerCase();
     if (!nome.trim() || !isValidEmail(email)) {
       setError('Confira seu nome e e-mail antes de salvar.'); return;
+    }
+    if (emailAlterado && !senhaAtualEmail) {
+      setError('Confirme sua senha atual para alterar o e-mail.'); return;
     }
     if (!genero) {
       setError('Selecione seu gênero antes de salvar.'); return;
@@ -164,7 +163,7 @@ export default function PerfilScreen({ navigation }: Props) {
     try {
       const response = await apiRequest<{ usuario: NonNullable<typeof user> }>('/auth/me', {
         method: 'PATCH',
-        body: JSON.stringify({ nome: nome.trim(), email: email.trim().toLowerCase(), telefone: telefoneInternacional, foto, genero, ...(perfilIdoso ? { perfilIdoso } : {}) }),
+        body: JSON.stringify({ nome: nome.trim(), email: emailNormalizado, ...(emailAlterado ? { senhaAtual: senhaAtualEmail } : {}), telefone: telefoneInternacional, foto, genero, ...(perfilIdoso ? { perfilIdoso } : {}) }),
       });
       updateUser(response.usuario);
       setError(''); setEditing(false);
@@ -186,8 +185,8 @@ export default function PerfilScreen({ navigation }: Props) {
       return;
     }
     Alert.alert(
-      'Alterações não salvas',
-      'Você fez alterações no perfil. Deseja descartá-las?',
+      'Cancelar edição?',
+      'As alterações feitas no perfil serão descartadas.',
       [
         { text: 'Continuar editando', style: 'cancel' },
         { text: 'Descartar alterações', style: 'destructive', onPress: discardEditing },
@@ -199,7 +198,7 @@ export default function PerfilScreen({ navigation }: Props) {
     Alert.alert('Sair da conta', 'Deseja realmente sair?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Sair', style: 'destructive', onPress: () => {
-        void unregisterPushNotifications().catch(() => undefined).finally(() => {
+        void unregisterPushNotifications().catch(() => undefined).then(() => apiRequest('/auth/logout', { method: 'POST' })).catch(() => undefined).finally(() => {
           logout(); resetMonitoring(); navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
         });
       } },
@@ -209,7 +208,13 @@ export default function PerfilScreen({ navigation }: Props) {
   const profile = user?.perfilIdoso;
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <BackHeader title="Meu perfil" onBack={() => navigation.goBack()} rightIcon={editing ? undefined : 'pencil-outline'} onRightPress={editing ? undefined : () => setEditing(true)} rightLabel="Editar perfil" />
+      <BackHeader
+        title="Meu perfil"
+        onBack={editing ? handleCancelEditing : () => navigation.goBack()}
+        rightIcon={editing ? 'close' : 'pencil-outline'}
+        onRightPress={editing ? handleCancelEditing : () => setEditing(true)}
+        rightLabel={editing ? 'Cancelar edição' : 'Editar perfil'}
+      />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <View style={styles.identity}>
@@ -225,6 +230,22 @@ export default function PerfilScreen({ navigation }: Props) {
           <Card style={styles.card}>{editing ? <>
             <AppTextInput label="Nome completo" value={nome} onChangeText={setNome} editable={!loading} maxLength={100} required />
             <AppTextInput label="E-mail" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" editable={!loading} maxLength={254} required />
+            {email.trim().toLowerCase() !== (user?.email ?? '').toLowerCase() ? (
+              <AppTextInput
+                label="Senha atual para confirmar o novo e-mail"
+                value={senhaAtualEmail}
+                onChangeText={(value) => { setSenhaAtualEmail(value); setError(''); }}
+                secureTextEntry={!mostrarSenhaEmail}
+                rightIcon={mostrarSenhaEmail ? 'eye-outline' : 'eye-off-outline'}
+                rightIconLabel={mostrarSenhaEmail ? 'Ocultar senha' : 'Mostrar senha'}
+                onRightIconPress={() => setMostrarSenhaEmail((value) => !value)}
+                autoCapitalize="none"
+                autoComplete="current-password"
+                editable={!loading}
+                maxLength={72}
+                required
+              />
+            ) : null}
             <CountryPhoneInput
               country={paisTelefone}
               onCountryChange={(country) => { setPaisTelefone(country); setError(''); }}
@@ -241,18 +262,18 @@ export default function PerfilScreen({ navigation }: Props) {
           </>}</Card>
 
           {user?.tipo === 'idoso' ? <>
-            <Text style={styles.sectionTitle}>Informações importantes</Text>
+            <Text accessibilityRole="header" style={styles.sectionTitle}>Informações importantes</Text>
             <Text style={styles.sectionHelper}>Esses dados ficam disponíveis somente para você e seus cuidadores vinculados.</Text>
             <Card style={styles.card}>{editing ? <>
               <View style={styles.inlineFields}>
-              <AppTextInput label="Data de nascimento" value={dataNascimento} onChangeText={setDataNascimento} placeholder="DD/MM/AAAA" keyboardType="number-pad" editable={!loading} maxLength={10} containerStyle={styles.flexField} />
+              <AppTextInput label="Data de nascimento" value={dataNascimento} onChangeText={(value) => setDataNascimento(value.replace(/\D/g, '').slice(0, 8).replace(/^(\d{2})(\d)/, '$1/$2').replace(/^(\d{2}\/\d{2})(\d)/, '$1/$2'))} placeholder="DD/MM/AAAA" keyboardType="number-pad" editable={!loading} maxLength={10} containerStyle={styles.flexField} />
               <AppTextInput label="Tipo sanguíneo" value={tipoSanguineo} onChangeText={setTipoSanguineo} placeholder="Ex.: O+" autoCapitalize="characters" editable={!loading} maxLength={5} containerStyle={styles.bloodField} />
               </View>
               <AppTextInput label="Condições médicas" value={condicoesMedicas} onChangeText={setCondicoesMedicas} placeholder="Ex.: hipertensão, diabetes" multiline textAlignVertical="top" style={styles.multiline} editable={!loading} maxLength={1000} />
               <AppTextInput label="Alergias" value={alergias} onChangeText={setAlergias} placeholder="Medicamentos, alimentos ou outras" multiline textAlignVertical="top" style={styles.multiline} editable={!loading} maxLength={1000} />
               <AppTextInput label="Medicamentos em uso" value={medicamentos} onChangeText={setMedicamentos} placeholder="Nome e dosagem, se souber" multiline textAlignVertical="top" style={styles.multiline} editable={!loading} maxLength={1000} />
               <AppTextInput label="Observações importantes" value={observacoes} onChangeText={setObservacoes} placeholder="Informações úteis em uma emergência" multiline textAlignVertical="top" style={styles.multiline} editable={!loading} maxLength={1000} />
-              <Text style={styles.subsectionTitle}>Contato de emergência</Text>
+              <Text accessibilityRole="header" style={styles.subsectionTitle}>Contato de emergência</Text>
               <AppTextInput label="Nome" value={contatoNome} onChangeText={setContatoNome} editable={!loading} maxLength={100} />
               <CountryPhoneInput
                 country={paisContato}
@@ -277,6 +298,7 @@ export default function PerfilScreen({ navigation }: Props) {
           {!editing ? <PushNotificationsCard /> : null}
 
           {!editing ? <Card style={styles.card}>
+            {user?.tipo === 'idoso' ? <ProfileActionRow icon="history" label="Histórico de alterações" onPress={() => navigation.navigate('HistoricoAlteracoes', { idosoId: user.id, nome: user.nome })} /> : null}
             <ProfileActionRow icon="shield-account-outline" label="Conta e segurança" onPress={() => navigation.navigate('ContaSeguranca')} />
             <ProfileActionRow icon="help-circle-outline" label="Ajuda e sobre o LifeGuard" onPress={() => navigation.navigate('AjudaSobre')} last />
           </Card> : null}
@@ -293,11 +315,11 @@ export default function PerfilScreen({ navigation }: Props) {
 }
 
 function ProfileRow({ icon, label, value, last }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: string; last?: boolean }) {
-  return <View style={[styles.row, !last && styles.rowBorder]}><View style={styles.rowIcon}><MaterialCommunityIcons name={icon} size={21} color={colors.coral} /></View><View style={styles.rowCopy}><Text style={styles.rowLabel}>{label}</Text><Text style={styles.rowValue}>{value}</Text></View></View>;
+  return <View accessible accessibilityLabel={`${label}: ${value}`} style={[styles.row, !last && styles.rowBorder]}><View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.rowIcon}><MaterialCommunityIcons name={icon} size={21} color={colors.coral} /></View><View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.rowCopy}><Text style={styles.rowLabel}>{label}</Text><Text style={styles.rowValue}>{value}</Text></View></View>;
 }
 
 function ProfileActionRow({ icon, label, onPress, last }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; onPress: () => void; last?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.actionRow, !last && styles.rowBorder, pressed && styles.actionPressed]}><View style={styles.rowIcon}><MaterialCommunityIcons name={icon} size={21} color={colors.coral} /></View><Text style={styles.actionLabel}>{label}</Text><MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} /></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.actionRow, !last && styles.rowBorder, pressed && styles.actionPressed]}><View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.rowIcon}><MaterialCommunityIcons name={icon} size={21} color={colors.coral} /></View><Text style={styles.actionLabel}>{label}</Text><MaterialCommunityIcons accessible={false} name="chevron-right" size={24} color={colors.textSecondary} /></Pressable>;
 }
 
 const styles = StyleSheet.create({
@@ -309,7 +331,7 @@ const styles = StyleSheet.create({
   accountType: { flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: colors.mossBg, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, marginTop: 8 },
   accountTypeText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.mossText }, card: { marginBottom: 18 },
   sectionTitle: { fontFamily: fonts.display, fontSize: 21, color: colors.ink, marginTop: 4 }, sectionHelper: { fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: 4, marginBottom: 12 },
-  subsectionTitle: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.ink, marginBottom: 12, marginTop: 2 }, inlineFields: { flexDirection: 'row', gap: 10 }, flexField: { flex: 1 }, bloodField: { width: 120 },
+  subsectionTitle: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.ink, marginBottom: 12, marginTop: 2 }, inlineFields: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, flexField: { flex: 1, minWidth: 180 }, bloodField: { flexGrow: 1, minWidth: 120 },
   multiline: { minHeight: 86, paddingTop: 14, paddingBottom: 14 }, row: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border }, rowIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.coralSoft, alignItems: 'center', justifyContent: 'center' },
   rowCopy: { flex: 1 }, rowLabel: { fontFamily: fonts.body, fontSize: 13, color: colors.textSecondary }, rowValue: { fontFamily: fonts.bodyBold, fontSize: 15, lineHeight: 21, color: colors.ink, marginTop: 2 },

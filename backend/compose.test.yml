@@ -1,0 +1,17 @@
+# Isolated local verification environment. No production credentials or volumes.
+name: lifeguard-test
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: lifeguard_ci
+      POSTGRES_DB: lifeguard_test
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - '127.0.0.1:55439:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U lifeguard_ci -d lifeguard_test']
+      interval: 5s
+      retries: 20

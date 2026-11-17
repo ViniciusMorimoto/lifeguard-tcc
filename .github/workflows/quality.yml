@@ -1,0 +1,50 @@
+name: Qualidade do aplicativo e API
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: lifeguard_ci
+          POSTGRES_DB: lifeguard_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U lifeguard_ci -d lifeguard_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://lifeguard_ci@localhost:5432/lifeguard_test
+      APP_ORIGIN: http://localhost:8081
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+      - name: Gerar chave efêmera de teste
+        run: echo "JWT_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx expo export --platform android --output-dir dist-ci
+      - run: npm ci
+        working-directory: backend
+      - run: npm run prisma:generate
+        working-directory: backend
+      - run: npm run db:deploy
+        working-directory: backend
+      - run: npm test
+        working-directory: backend
+      - run: npm run test:integration
+        working-directory: backend

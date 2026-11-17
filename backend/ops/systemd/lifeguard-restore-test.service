@@ -1,0 +1,15 @@
+[Unit]
+Description=Teste de restauração do backup PostgreSQL do LifeGuard
+Requires=docker.service
+After=docker.service lifeguard-backup.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+SupplementaryGroups=docker
+Environment=LIFEGUARD_PROJECT_DIR=/home/ubuntu/lifeguard-tcc/backend
+Environment=LIFEGUARD_BACKUP_DIR=/home/ubuntu/backups/lifeguard-postgres
+ExecStart=/home/ubuntu/lifeguard-tcc/backend/ops/test-postgres-restore.sh
+
+[Install]
+WantedBy=multi-user.target

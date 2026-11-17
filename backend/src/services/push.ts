@@ -44,6 +44,7 @@ export async function sendPushToUsers(
   for (let offset = 0; offset < eligibleTokens.length; offset += 100) {
     const chunk = eligibleTokens.slice(offset, offset + 100);
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      signal: AbortSignal.timeout(15_000),
       method: 'POST',
       headers: { Accept: 'application/json', 'Accept-Encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
       body: JSON.stringify(chunk.map(({ token }) => ({
@@ -63,7 +64,15 @@ export async function sendPushToUsers(
     for (let index = 0; index < chunk.length; index += 1) {
       const token = chunk[index];
       const ticket = tickets[index];
-      if (!token || !ticket) continue;
+      if (!token) continue;
+      await prisma.pushDelivery.create({ data: {
+        userId: token.userId, pushTokenId: token.id,
+        providerId: ticket?.status === 'ok' ? ticket.id : null,
+        status: ticket?.status === 'ok' ? 'pending' : 'failed',
+        errorCode: ticket?.status === 'error' ? (ticket.details?.error ?? 'ProviderError') : ticket ? null : 'MissingTicket',
+        nextCheckAt: new Date(Date.now() + 15 * 60_000),
+      } });
+      if (!ticket) continue;
       if (ticket.status === 'ok') {
         sent += 1;
         if (alertId) {

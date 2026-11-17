@@ -55,7 +55,7 @@ export default function CountryPhoneInput({ country, onCountryChange, value, onC
     <View style={styles.wrapper}>
       <Text style={styles.label}>Telefone {required ? <Text style={styles.required}>*</Text> : null}</Text>
       <View style={[styles.shell, error && styles.shellError, disabled && styles.disabled]}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Selecionar país, atual ${countryName(country)}, mais ${callingCode}`} disabled={disabled} onPress={() => setVisible(true)} style={styles.countryButton}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Selecionar país. Atual: ${countryName(country)}, código mais ${callingCode}`} accessibilityState={{ disabled }} disabled={disabled} onPress={() => setVisible(true)} style={styles.countryButton}>
           <Text style={styles.flag}>{flagForCountry(country)}</Text>
           <Text style={styles.callingCode}>+{callingCode}</Text>
           <MaterialCommunityIcons name="chevron-down" size={18} color={colors.textSecondary} />
@@ -63,6 +63,8 @@ export default function CountryPhoneInput({ country, onCountryChange, value, onC
         <View style={styles.divider} />
         <TextInput
           accessibilityLabel="Número de telefone"
+          accessibilityHint={error ? `Erro: ${error}` : helperText}
+          accessibilityState={{ disabled: Boolean(disabled) }}
           value={value}
           onChangeText={(text) => onChangeText(formatNationalPhone(text, country))}
           editable={!disabled}
@@ -74,30 +76,30 @@ export default function CountryPhoneInput({ country, onCountryChange, value, onC
           style={styles.input}
         />
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : <Text style={styles.helper}>{helperText ?? 'Selecione o país; o código internacional será salvo automaticamente.'}</Text>}
+      {error ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : <Text style={styles.helper}>{helperText ?? 'Selecione o país; o código internacional será salvo automaticamente.'}</Text>}
 
       <Modal visible={visible} animationType="slide" onRequestClose={() => setVisible(false)}>
         <SafeAreaView style={styles.modalSafe}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Selecionar país</Text>
+            <Text accessibilityRole="header" style={styles.modalTitle}>Selecionar país</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Fechar seleção de país" onPress={() => setVisible(false)} style={styles.closeButton}>
-              <MaterialCommunityIcons name="close" size={25} color={colors.ink} />
+              <MaterialCommunityIcons accessible={false} name="close" size={25} color={colors.ink} />
             </Pressable>
           </View>
           <View style={styles.searchShell}>
-            <MaterialCommunityIcons name="magnify" size={21} color={colors.textSecondary} />
-            <TextInput value={search} onChangeText={setSearch} placeholder="Buscar país ou código" placeholderTextColor={colors.textSecondary} autoFocus style={styles.searchInput} />
+            <MaterialCommunityIcons accessible={false} name="magnify" size={21} color={colors.textSecondary} />
+            <TextInput accessibilityLabel="Buscar país ou código telefônico" value={search} onChangeText={setSearch} placeholder="Buscar país ou código" placeholderTextColor={colors.textSecondary} autoFocus style={styles.searchInput} />
           </View>
           <FlatList
             data={filtered}
             keyExtractor={(item) => item.code}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
-              <Pressable accessibilityRole="button" onPress={() => select(item.code)} style={({ pressed }) => [styles.countryRow, pressed && styles.pressed]}>
+              <Pressable accessibilityRole="radio" accessibilityLabel={`${item.name}, código mais ${item.callingCode}`} accessibilityState={{ checked: item.code === country }} onPress={() => select(item.code)} style={({ pressed }) => [styles.countryRow, pressed && styles.pressed]}>
                 <Text style={styles.rowFlag}>{flagForCountry(item.code)}</Text>
                 <Text style={styles.countryName}>{item.name}</Text>
                 <Text style={styles.rowCode}>+{item.callingCode}</Text>
-                {item.code === country ? <MaterialCommunityIcons name="check" size={21} color={colors.coral} /> : null}
+                {item.code === country ? <MaterialCommunityIcons accessible={false} name="check" size={21} color={colors.coral} /> : null}
               </Pressable>
             )}
           />

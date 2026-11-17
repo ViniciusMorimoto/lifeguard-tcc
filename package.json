@@ -4,12 +4,12 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
+    "android": "expo run:android",
     "android:native": "expo run:android",
     "apk:local": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-android-apk.ps1",
     "apk:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/publish-android-apk.ps1",
     "update:publish": "npx eas-cli update --channel production",
-    "ios": "expo start --ios",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && expo install --check"
@@ -17,19 +17,23 @@
   "dependencies": {
     "@expo-google-fonts/atkinson-hyperlegible": "^0.4.1",
     "@expo-google-fonts/fraunces": "^0.4.1",
+    "@expo-google-fonts/montserrat": "^0.4.2",
+    "@expo-google-fonts/open-sans": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
-    "@react-navigation/native": "^7.3.16",
-    "@react-navigation/native-stack": "^7.18.8",
+    "@react-navigation/native": "^7.4.1",
+    "@react-navigation/native-stack": "^7.19.1",
     "expo": "~54.0.37",
     "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.14",
     "expo-device": "~8.0.10",
+    "expo-file-system": "~19.0.24",
     "expo-font": "~14.0.12",
     "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~17.0.11",
     "expo-network": "~8.0.8",
     "expo-notifications": "~0.32.17",
     "expo-secure-store": "~15.0.8",
+    "expo-sharing": "~14.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-updates": "~29.0.20",
@@ -49,6 +53,12 @@
   "devDependencies": {
     "@types/react": "~19.1.0",
     "typescript": "~5.9.2"
+  },
+  "overrides": {
+    "image-size": "1.2.1",
+    "postcss": "8.5.23",
+    "shell-quote": "1.12.0",
+    "uuid": "11.1.1"
   },
   "private": true
 }

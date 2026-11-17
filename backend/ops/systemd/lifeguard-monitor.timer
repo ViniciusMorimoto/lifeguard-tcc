@@ -1,0 +1,11 @@
+[Unit]
+Description=Verificação da infraestrutura do LifeGuard a cada cinco minutos
+
+[Timer]
+OnCalendar=*-*-* *:00/5:00
+Persistent=true
+RandomizedDelaySec=30s
+Unit=lifeguard-monitor.service
+
+[Install]
+WantedBy=timers.target

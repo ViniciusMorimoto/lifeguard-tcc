@@ -1,6 +1,6 @@
 export type RootStackParamList = {
-  Login: undefined;
-  Cadastro: undefined;
+  Login: { tipoConta?: 'idoso' | 'cuidador' } | undefined;
+  Cadastro: { tipoConta?: 'idoso' | 'cuidador' } | undefined;
   RecuperarSenha: undefined;
   DocumentoLegal: { tipo: 'termos' | 'privacidade' };
   HomeIdoso: undefined;
@@ -9,8 +9,9 @@ export type RootStackParamList = {
   ContaSeguranca: undefined;
   AjudaSobre: undefined;
   Historico: { idosoId?: string; nome?: string } | undefined;
+  HistoricoAlteracoes: { idosoId: string; nome: string };
   MeuDispositivo: undefined;
-  ParearDispositivo: undefined;
+  ParearDispositivo: { trocarRede?: boolean } | undefined;
   Cuidadores: undefined;
   LimitesIdoso: undefined;
   DetalheIdoso: { idosoId: string; nome: string };

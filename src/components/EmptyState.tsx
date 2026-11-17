@@ -14,8 +14,8 @@ type Props = {
 export default function EmptyState({ icon, title, message, actionLabel, onAction }: Props) {
   return (
     <View style={styles.wrapper}>
-      <View style={styles.icon}><MaterialCommunityIcons name={icon} size={34} color={colors.coral} /></View>
-      <Text style={styles.title}>{title}</Text>
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.icon}><MaterialCommunityIcons name={icon} size={34} color={colors.coral} /></View>
+      <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
       {actionLabel && onAction ? <AppButton label={actionLabel} variant="secondary" onPress={onAction} style={styles.action} /> : null}
     </View>

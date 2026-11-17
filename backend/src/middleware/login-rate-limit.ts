@@ -2,7 +2,7 @@ import type { Request } from 'express';
 import { HttpError } from '../lib/http-error.js';
 
 const WINDOW_MS = 15 * 60 * 1000;
-const MAX_FAILURES = 8;
+const MAX_FAILURES = 5;
 
 type Attempt = { failures: number; resetAt: number };
 

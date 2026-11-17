@@ -1,0 +1,1 @@
+ALTER TABLE "Device" ADD COLUMN "isSimulator" BOOLEAN NOT NULL DEFAULT false;

@@ -1,0 +1,15 @@
+[Unit]
+Description=Backup do PostgreSQL do LifeGuard
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+SupplementaryGroups=docker
+Environment=LIFEGUARD_PROJECT_DIR=/home/ubuntu/lifeguard-tcc/backend
+Environment=LIFEGUARD_BACKUP_DIR=/home/ubuntu/backups/lifeguard-postgres
+ExecStart=/home/ubuntu/lifeguard-tcc/backend/ops/backup-postgres.sh
+
+[Install]
+WantedBy=multi-user.target

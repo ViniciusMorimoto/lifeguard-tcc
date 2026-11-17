@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -11,9 +11,10 @@ import SegmentedToggle from '../../components/SegmentedToggle';
 import EmptyState from '../../components/EmptyState';
 import { useMonitoringStore, type AlertStatus } from '../../store/monitoringStore';
 import { useFocusEffect } from '@react-navigation/native';
-import { apiRequest, ApiError } from '../../services/api';
+import { apiRequest, ApiError, formatDateTime } from '../../services/api';
 import { fetchCaregiverDashboard } from '../../services/monitoring';
 import InlineNotice from '../../components/InlineNotice';
+import LoadingState from '../../components/LoadingState';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Alertas'>;
 const STATUS_LABEL: Record<AlertStatus, string> = { novo: 'Novo', visto: 'Visto', resolvido: 'Resolvido' };
@@ -24,13 +25,28 @@ export default function AlertasScreen({ navigation }: Props) {
   const setAlerts = useMonitoringStore((state) => state.setAlerts);
   const [filtro, setFiltro] = useState<'pendentes' | 'resolvidos'>('pendentes');
   const [erro, setErro] = useState('');
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [refreshing, setRefreshing] = useState(false);
   const filtrados = alertas.filter((alerta) => filtro === 'pendentes' ? alerta.status !== 'resolvido' : alerta.status === 'resolvido');
 
-  useFocusEffect(useCallback(() => {
-    void fetchCaregiverDashboard()
-      .then((dashboard) => { setAlerts(dashboard.alerts); setErro(''); })
-      .catch((error) => setErro(error instanceof ApiError ? error.message : 'Não foi possível carregar os alertas.'));
-  }, [setAlerts]));
+  const loadAlerts = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    try {
+      const dashboard = await fetchCaregiverDashboard();
+      setAlerts(dashboard.alerts);
+      setErro(dashboard.cache.fromCache
+        ? `Sem conexão. Exibindo os alertas salvos em ${formatDateTime(dashboard.cache.savedAt!)}. Para alterar o status, conecte-se novamente.`
+        : '');
+      setLoadState('ready');
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : 'Não foi possível carregar os alertas.');
+      setLoadState('error');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [setAlerts]);
+
+  useFocusEffect(useCallback(() => { void loadAlerts(); }, [loadAlerts]));
 
   async function changeStatus(id: string, status: AlertStatus) {
     const previous = alertas.find((alert) => alert.id === id)?.status;
@@ -51,15 +67,17 @@ export default function AlertasScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <BackHeader title="Alertas" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadAlerts(true)} tintColor={colors.coral} />}>
         <Text style={styles.intro}>Acompanhe ocorrências fora dos limites definidos e registre quando estiverem resolvidas.</Text>
-        {erro ? <InlineNotice tone="warning" message={erro} /> : null}
+        {erro && alertas.length > 0 ? <InlineNotice tone="warning" message={erro} /> : null}
         <SegmentedToggle value={filtro} onChange={setFiltro} options={[{ value: 'pendentes', label: `Pendentes (${alertas.filter((item) => item.status !== 'resolvido').length})` }, { value: 'resolvidos', label: 'Resolvidos' }]} />
 
-        {filtrados.length === 0 ? <EmptyState icon="bell-check-outline" title="Tudo resolvido" message="Não há alertas nesta categoria." /> : filtrados.map((alerta) => (
+        {loadState === 'loading' && alertas.length === 0 ? <LoadingState message="Carregando alertas..." /> : loadState === 'error' && alertas.length === 0 ? (
+          <EmptyState icon="cloud-alert-outline" title="Alertas indisponíveis" message={erro} actionLabel="Tentar novamente" onAction={() => { setLoadState('loading'); void loadAlerts(); }} />
+        ) : filtrados.length === 0 ? <EmptyState icon="bell-check-outline" title="Tudo resolvido" message="Não há alertas nesta categoria." /> : filtrados.map((alerta) => (
           <Card key={alerta.id} style={styles.card}>
             <View style={styles.rowTop}>
-              <View style={styles.icon}>
+              <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.icon}>
                 <MaterialCommunityIcons
                   name={alerta.tipo === 'batimento' ? 'heart-pulse' : 'thermometer'}
                   size={20}
@@ -81,11 +99,11 @@ export default function AlertasScreen({ navigation }: Props) {
 
             {alerta.status !== 'resolvido' && (
               <View style={styles.actions}>
-                {alerta.status === 'novo' ? <Pressable accessibilityRole="button" onPress={() => marcarVisto(alerta.id)} style={styles.actionBtn}><Text style={styles.secondaryAction}>Marcar como visto</Text></Pressable> : null}
-                <Pressable accessibilityRole="button" onPress={() => marcarResolvido(alerta.id)} style={styles.actionBtn}><Text style={styles.resolverLabel}>Resolver alerta</Text></Pressable>
+                {alerta.status === 'novo' ? <Pressable accessibilityRole="button" accessibilityLabel={`Marcar alerta de ${alerta.idosoNome} como visto`} onPress={() => marcarVisto(alerta.id)} style={styles.actionBtn}><Text style={styles.secondaryAction}>Marcar como visto</Text></Pressable> : null}
+                <Pressable accessibilityRole="button" accessibilityLabel={`Resolver alerta de ${alerta.idosoNome}`} onPress={() => marcarResolvido(alerta.id)} style={styles.actionBtn}><Text style={styles.resolverLabel}>Resolver alerta</Text></Pressable>
               </View>
             )}
-            <Pressable accessibilityRole="button" onPress={() => navigation.navigate('DetalheIdoso', { idosoId: alerta.idosoId, nome: alerta.idosoNome })} style={styles.personLink}><Text style={styles.personLinkText}>Ver monitoramento de {alerta.idosoNome.split(' ')[0]}</Text><MaterialCommunityIcons name="chevron-right" size={20} color={colors.coral} /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Ver monitoramento de ${alerta.idosoNome}`} onPress={() => navigation.navigate('DetalheIdoso', { idosoId: alerta.idosoId, nome: alerta.idosoNome })} style={styles.personLink}><Text style={styles.personLinkText}>Ver monitoramento de {alerta.idosoNome.split(' ')[0]}</Text><MaterialCommunityIcons accessible={false} name="chevron-right" size={20} color={colors.coral} /></Pressable>
           </Card>
         ))}
       </ScrollView>
@@ -110,7 +128,7 @@ const styles = StyleSheet.create({
   statusTagLabelNovo: { color: colors.emberText ?? colors.ember },
   statusTagLabelResolvido: { color: colors.mossText },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  actionBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  actionBtn: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 4 },
   secondaryAction: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.textSecondary },
   resolverLabel: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.coral },
   personLink: { minHeight: 48, borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

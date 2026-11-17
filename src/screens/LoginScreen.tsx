@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,39 +7,35 @@ import { useAuthStore } from '../store/authStore';
 import { colors, fonts } from '../theme/theme';
 import AppTextInput from '../components/AppTextInput';
 import AppButton from '../components/AppButton';
-import PulseLine from '../components/PulseLine';
+import BrandLogo from '../components/BrandLogo';
 import SegmentedToggle from '../components/SegmentedToggle';
-import InlineNotice from '../components/InlineNotice';
-import { apiRequest, ApiError, getApiUrl, setApiUrl } from '../services/api';
+import { apiRequest, ApiError } from '../services/api';
 import OptionCheckbox from '../components/OptionCheckbox';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
-export default function LoginScreen({ navigation }: Props) {
+export default function LoginScreen({ navigation, route }: Props) {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
-  const [tipoConta, setTipoConta] = useState<'idoso' | 'cuidador'>('idoso');
-  const [mostrarServidor, setMostrarServidor] = useState(false);
-  const [servidor, setServidor] = useState(getApiUrl());
+  const [tipoConta, setTipoConta] = useState<'idoso' | 'cuidador'>(route.params?.tipoConta ?? 'idoso');
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
   const [manterConectado, setManterConectado] = useState(true);
   const setSession = useAuthStore((state) => state.setSession);
 
+  useEffect(() => {
+    if (route.params?.tipoConta) setTipoConta(route.params.tipoConta);
+  }, [route.params?.tipoConta]);
+
   async function handleLogin() {
+    if (loading) return;
     const normalizedEmail = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(normalizedEmail) || !senha) {
       setErro('Digite um e-mail válido e sua senha.');
       return;
     }
-    if (!/^https?:\/\/\S+\/api$/.test(servidor.trim().replace(/\/+$/, ''))) {
-      setErro('Confira o endereço da API. Exemplo: https://api.exemplo.com/api');
-      setMostrarServidor(true);
-      return;
-    }
     setLoading(true);
-    setApiUrl(servidor);
     try {
       const response = await apiRequest<{ token: string; usuario: NonNullable<ReturnType<typeof useAuthStore.getState>['user']> }>('/auth/login', {
         method: 'POST',
@@ -65,9 +61,7 @@ export default function LoginScreen({ navigation }: Props) {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <View style={styles.brand}>
-            <Text style={styles.titulo}>LifeGuard</Text>
-            <Text style={styles.tagline}>Cuidado presente, mesmo à distância</Text>
-            <PulseLine variant="divider" style={styles.pulse} />
+            <BrandLogo />
           </View>
 
           <Text style={styles.sectionLabel}>Como você usa o LifeGuard?</Text>
@@ -88,7 +82,7 @@ export default function LoginScreen({ navigation }: Props) {
             onChangeText={(value) => { setSenha(value); setErro(''); }}
             editable={!loading}
             secureTextEntry={!mostrarSenha}
-            rightIcon={mostrarSenha ? 'eye-off-outline' : 'eye-outline'}
+            rightIcon={mostrarSenha ? 'eye-outline' : 'eye-off-outline'}
             rightIconLabel={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
             onRightIconPress={() => setMostrarSenha((value) => !value)}
             autoComplete="password"
@@ -100,28 +94,13 @@ export default function LoginScreen({ navigation }: Props) {
 
           <OptionCheckbox checked={manterConectado} label="Manter conectado neste aparelho" onChange={setManterConectado} disabled={loading} />
 
-          {mostrarServidor ? (
-            <AppTextInput
-              label="Endereço da API (avançado)"
-              value={servidor}
-              onChangeText={(value) => { setServidor(value); setErro(''); }}
-              editable={!loading}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              helperText="Altere somente para testes de desenvolvimento. O endereço deve terminar em /api."
-            />
-          ) : null}
-
           {erro ? <Text accessibilityRole="alert" style={styles.erro}>{erro}</Text> : null}
 
           <AppButton label="Entrar" icon="login" onPress={handleLogin} loading={loading} />
-          <AppButton label={mostrarServidor ? 'Ocultar configuração avançada' : 'Configuração avançada'} variant="text" onPress={() => setMostrarServidor((value) => !value)} disabled={loading} style={styles.serverConfig} />
           <AppButton label="Esqueci minha senha" variant="text" onPress={() => navigation.navigate('RecuperarSenha')} disabled={loading} style={styles.forgot} />
-          <InlineNotice message="Teste real: cuidador ana@lifeguard.test ou paciente maria@lifeguard.test. Senha: Teste123!" />
           <View style={styles.createAccount}>
             <Text style={styles.createText}>Ainda não tem conta?</Text>
-            <AppButton label="Criar conta" variant="text" onPress={() => navigation.navigate('Cadastro')} disabled={loading} />
+            <AppButton label="Criar conta" variant="text" onPress={() => navigation.navigate('Cadastro', { tipoConta })} disabled={loading} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -140,7 +119,6 @@ const styles = StyleSheet.create({
   sectionLabel: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.ink, marginBottom: 8 },
   erro: { fontFamily: fonts.body, color: colors.emberText, marginBottom: 12, fontSize: 14 },
   forgot: { alignSelf: 'center', marginVertical: 4 },
-  serverConfig: { alignSelf: 'center', marginTop: 4 },
   createAccount: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 },
   createText: { fontFamily: fonts.body, fontSize: 15, color: colors.textSecondary },
 });

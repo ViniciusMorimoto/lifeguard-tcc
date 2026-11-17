@@ -3,14 +3,16 @@ import { z } from 'zod';
 import { classifyReading } from '../domain/readings.js';
 import { AlertStatus, LinkStatus, UserType } from '../generated/prisma/enums.js';
 import { HttpError } from '../lib/http-error.js';
+import { aggregateReadingsByInterval } from '../domain/reading-aggregates.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { serializeElderProfile, serializeGender } from '../serializers.js';
 
 const idSchema = z.uuid();
+const alertStatusLabels = { NEW: 'novo', SEEN: 'visto', RESOLVED: 'resolvido' } as const;
 const limitsSchema = z.object({
   batimentoMin: z.number().int().min(30).max(150),
-  batimentoMax: z.number().int().min(50).max(240),
+  batimentoMax: z.number().int().min(50).max(250),
   temperaturaMin: z.number().min(30).max(40),
   temperaturaMax: z.number().min(34).max(45),
 }).refine((data) => data.batimentoMin < data.batimentoMax, {
@@ -31,7 +33,7 @@ async function assertElderAccess(userId: string, userType: UserType, elderId: st
       where: { caregiverId: userId, elderId, status: LinkStatus.ACTIVE },
       select: { id: true },
     });
-    if (link) return;
+    if (link) return link.id;
   }
   throw new HttpError(403, 'Você não possui acesso a este paciente.', 'ELDER_ACCESS_DENIED');
 }
@@ -63,6 +65,7 @@ function serializeReading(reading: {
   contactDetected: boolean;
   valid: boolean;
   invalidReason: string | null;
+  source: string;
 } | null) {
   if (!reading) return null;
   return {
@@ -74,6 +77,7 @@ function serializeReading(reading: {
     contatoDetectado: reading.contactDetected,
     valida: reading.valid,
     motivoInvalido: reading.invalidReason,
+    origem: reading.source.toLowerCase(),
   };
 }
 
@@ -91,7 +95,7 @@ monitoringRouter.get('/idosos', async (req, res) => {
           devices: {
             where: { active: true },
             take: 1,
-            include: { readings: { orderBy: { timestamp: 'desc' }, take: 1 } },
+            include: { readings: { where: { valid: true }, orderBy: { timestamp: 'desc' }, take: 1 } },
           },
         },
       },
@@ -114,6 +118,7 @@ monitoringRouter.get('/idosos', async (req, res) => {
       telefone: elder.phone,
       foto: elder.profilePhoto,
       status: classifyReading(latest, limits),
+      simulado: elder.devices[0]?.isSimulator ?? false,
       ultimaLeitura: serializeReading(latest),
     };
   });
@@ -123,7 +128,7 @@ monitoringRouter.get('/idosos', async (req, res) => {
 
 monitoringRouter.get('/idosos/:idosoId', async (req, res) => {
   const elderId = idSchema.parse(req.params.idosoId);
-  await assertElderAccess(req.auth!.userId, req.auth!.type, elderId);
+  const linkId = await assertElderAccess(req.auth!.userId, req.auth!.type, elderId);
   const elder = await prisma.user.findFirst({
     where: { id: elderId, type: UserType.ELDER },
     include: {
@@ -132,7 +137,7 @@ monitoringRouter.get('/idosos/:idosoId', async (req, res) => {
       devices: {
         where: { active: true },
         take: 1,
-        include: { readings: { orderBy: { timestamp: 'desc' }, take: 1 } },
+        include: { readings: { where: { valid: true }, orderBy: { timestamp: 'desc' }, take: 1 } },
       },
     },
   });
@@ -143,6 +148,7 @@ monitoringRouter.get('/idosos/:idosoId', async (req, res) => {
   res.json({
     idoso: {
       id: elder.id,
+      vinculoId: linkId,
       nome: elder.name,
       telefone: elder.phone,
       foto: elder.profilePhoto,
@@ -155,6 +161,7 @@ monitoringRouter.get('/idosos/:idosoId', async (req, res) => {
           }
         : null,
       status: limits ? classifyReading(latest, limits) : 'sem_sinal',
+      simulado: elder.devices[0]?.isSimulator ?? false,
       ultimaLeitura: serializeReading(latest),
       limites: limits ? serializeLimits(limits) : null,
     },
@@ -163,15 +170,102 @@ monitoringRouter.get('/idosos/:idosoId', async (req, res) => {
 
 monitoringRouter.get('/idosos/:idosoId/leituras', async (req, res) => {
   const elderId = idSchema.parse(req.params.idosoId);
-  const query = z.object({ limite: z.coerce.number().int().min(1).max(500).default(100) }).parse(req.query);
+  const query = z.object({ limite: z.coerce.number().int().min(1).max(500).default(100), resolucao: z.enum(['10s', '1h']).default('1h') }).parse(req.query);
   await assertElderAccess(req.auth!.userId, req.auth!.type, elderId);
+  if (query.resolucao === '10s') {
+    const since = new Date(Date.now() - 5 * 60_000);
+    const readings = await prisma.reading.findMany({
+      where: { device: { elderId }, timestamp: { gte: since } },
+      orderBy: { timestamp: 'asc' },
+      take: 120,
+    });
+    const buckets = aggregateReadingsByInterval(readings, 10_000);
+    res.json({ leituras: buckets.slice(-30).map((bucket) => ({
+      id: bucket.timestamp.toISOString(),
+      batimento: bucket.heartRateAverage === null ? null : Math.round(bucket.heartRateAverage),
+      batimentoMinimo: bucket.heartRateMinimum,
+      batimentoMaximo: bucket.heartRateMaximum,
+      temperatura: bucket.temperatureAverage,
+      temperaturaMinima: bucket.temperatureMinimum,
+      temperaturaMaxima: bucket.temperatureMaximum,
+      horario: bucket.timestamp,
+      qualidadeSinal: bucket.sampleCount ? 'good' : 'no_contact',
+      contatoDetectado: bucket.sampleCount > 0,
+      valida: bucket.sampleCount > 0,
+      motivoInvalido: null,
+      origem: 'aggregate',
+    })) });
+    return;
+  }
+  const hourlyReadings = await prisma.$queryRaw<Array<{
+    horario: Date;
+    batimento: number | null;
+    batimentoMinimo: number | null;
+    batimentoMaximo: number | null;
+    temperatura: number | null;
+    temperaturaMinima: number | null;
+    temperaturaMaxima: number | null;
+    quantidade: bigint;
+  }>>`
+    SELECT
+      date_trunc('hour', reading."timestamp") AS horario,
+      AVG(reading."heartRate")::double precision AS batimento,
+      MIN(reading."heartRate") AS "batimentoMinimo",
+      MAX(reading."heartRate") AS "batimentoMaximo",
+      AVG(reading."temperature") AS temperatura,
+      MIN(reading."temperature") AS "temperaturaMinima",
+      MAX(reading."temperature") AS "temperaturaMaxima",
+      COUNT(*) AS quantidade
+    FROM "Reading" reading
+    INNER JOIN "Device" device ON device.id = reading."deviceId"
+    WHERE device."elderId" = ${elderId}::uuid
+      AND reading.valid = true
+      AND reading."timestamp" >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - (${query.limite} * INTERVAL '1 hour')
+    GROUP BY date_trunc('hour', reading."timestamp")
+    ORDER BY horario DESC
+    LIMIT ${query.limite}
+  `;
+  res.json({ leituras: hourlyReadings.map((item) => ({
+    id: item.horario.toISOString(),
+    batimento: item.batimento === null ? null : Math.round(item.batimento),
+    batimentoMinimo: item.batimentoMinimo,
+    batimentoMaximo: item.batimentoMaximo,
+    temperatura: item.temperatura,
+    temperaturaMinima: item.temperaturaMinima,
+    temperaturaMaxima: item.temperaturaMaxima,
+    horario: item.horario,
+    qualidadeSinal: 'good',
+    contatoDetectado: true,
+    valida: Number(item.quantidade) > 0,
+    motivoInvalido: null,
+    origem: 'aggregate',
+  })) });
+});
 
-  const readings = await prisma.reading.findMany({
-    where: { device: { elderId, active: true } },
-    orderBy: { timestamp: 'desc' },
-    take: query.limite,
+monitoringRouter.get('/idosos/:idosoId/alteracoes', async (req, res) => {
+  const elderId = idSchema.parse(req.params.idosoId);
+  await assertElderAccess(req.auth!.userId, req.auth!.type, elderId);
+  const changes = await prisma.patientChangeLog.findMany({
+    where: { patientId: elderId },
+    include: { changedBy: { select: { id: true, name: true, type: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
   });
-  res.json({ leituras: readings.map(serializeReading) });
+  res.json({
+    alteracoes: changes.map((change) => ({
+      id: change.id,
+      categoria: change.category === 'ALERT_LIMITS' ? 'limites' : 'perfil',
+      campos: change.changedFields,
+      alteradoEm: change.createdAt,
+      alteradoPor: change.changedBy
+        ? {
+            id: change.changedBy.id,
+            nome: change.changedBy.name,
+            tipo: change.changedBy.type === UserType.ELDER ? 'paciente' : 'cuidador',
+          }
+        : null,
+    })),
+  });
 });
 
 monitoringRouter.get('/idosos/:idosoId/limites', async (req, res) => {
@@ -192,24 +286,44 @@ monitoringRouter.put('/idosos/:idosoId/limites', async (req, res) => {
   const elderId = idSchema.parse(req.params.idosoId);
   const input = limitsSchema.parse(req.body);
   await assertElderAccess(req.auth!.userId, req.auth!.type, elderId);
-  const limits = await prisma.alertLimit.upsert({
-    where: { elderId },
-    create: {
-      elderId,
-      heartRateMinimum: input.batimentoMin,
-      heartRateMaximum: input.batimentoMax,
-      temperatureMinimum: input.temperaturaMin,
-      temperatureMaximum: input.temperaturaMax,
-      definedById: req.auth!.userId,
-    },
-    update: {
-      heartRateMinimum: input.batimentoMin,
-      heartRateMaximum: input.batimentoMax,
-      temperatureMinimum: input.temperaturaMin,
-      temperatureMaximum: input.temperaturaMax,
-      definedById: req.auth!.userId,
-    },
-    include: { definedBy: { select: { name: true } } },
+  const currentLimits = await prisma.alertLimit.findUnique({ where: { elderId } });
+  const changedFields: string[] = [];
+  if (currentLimits?.heartRateMinimum !== input.batimentoMin) changedFields.push('batimento_minimo');
+  if (currentLimits?.heartRateMaximum !== input.batimentoMax) changedFields.push('batimento_maximo');
+  if (currentLimits?.temperatureMinimum !== input.temperaturaMin) changedFields.push('temperatura_minima');
+  if (currentLimits?.temperatureMaximum !== input.temperaturaMax) changedFields.push('temperatura_maxima');
+
+  const limits = await prisma.$transaction(async (tx) => {
+    const updated = await tx.alertLimit.upsert({
+      where: { elderId },
+      create: {
+        elderId,
+        heartRateMinimum: input.batimentoMin,
+        heartRateMaximum: input.batimentoMax,
+        temperatureMinimum: input.temperaturaMin,
+        temperatureMaximum: input.temperaturaMax,
+        definedById: req.auth!.userId,
+      },
+      update: {
+        heartRateMinimum: input.batimentoMin,
+        heartRateMaximum: input.batimentoMax,
+        temperatureMinimum: input.temperaturaMin,
+        temperatureMaximum: input.temperaturaMax,
+        definedById: req.auth!.userId,
+      },
+      include: { definedBy: { select: { name: true } } },
+    });
+    if (changedFields.length > 0) {
+      await tx.patientChangeLog.create({
+        data: {
+          patientId: elderId,
+          changedById: req.auth!.userId,
+          category: 'ALERT_LIMITS',
+          changedFields,
+        },
+      });
+    }
+    return updated;
   });
   res.json({ limites: serializeLimits(limits) });
 });
@@ -238,7 +352,7 @@ monitoringRouter.get('/alertas', async (req, res) => {
       valor: alert.measuredValue,
       mensagem: alert.message,
       horario: alert.timestamp,
-      status: alert.status.toLowerCase(),
+      status: alertStatusLabels[alert.status],
     })),
   });
 });
@@ -257,5 +371,5 @@ monitoringRouter.patch('/alertas/:alertaId', async (req, res) => {
       resolvedAt: input.status === 'resolvido' ? new Date() : null,
     },
   });
-  res.json({ alerta: { id: updated.id, status: updated.status.toLowerCase() } });
+  res.json({ alerta: { id: updated.id, status: alertStatusLabels[updated.status] } });
 });

@@ -32,6 +32,7 @@ export default function GenderSelector({ value, onChange, disabled = false, requ
             <Pressable
               key={option.value}
               accessibilityRole="radio"
+              accessibilityLabel={option.label}
               accessibilityState={{ checked: selected, disabled }}
               disabled={disabled}
               onPress={() => onChange(option.value)}
@@ -56,7 +57,7 @@ const styles = StyleSheet.create({
   label: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.ink, marginBottom: 9 },
   required: { color: colors.ember },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  option: { minHeight: 42, justifyContent: 'center', paddingHorizontal: 13, borderRadius: radii.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.cardBg },
+  option: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 13, borderRadius: radii.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.cardBg },
   optionSelected: { backgroundColor: colors.ink, borderColor: colors.ink },
   optionText: { fontFamily: fonts.body, fontSize: 14, color: colors.textSecondary },
   optionTextSelected: { fontFamily: fonts.bodyBold, color: colors.sand },

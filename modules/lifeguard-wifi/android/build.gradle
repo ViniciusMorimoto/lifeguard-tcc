@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.mdantasc.lifeguard.wifi'
+version = '1.0.0'
+
+android {
+  namespace 'com.mdantasc.lifeguard.wifi'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}

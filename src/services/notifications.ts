@@ -29,7 +29,7 @@ async function configureAndroidChannel() {
     description: 'Avisos importantes sobre pacientes e vínculos de cuidado.',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 180, 250],
-    lightColor: '#E86F51',
+    lightColor: '#35B8C8',
     sound: 'default',
   });
 }
@@ -71,6 +71,10 @@ export async function unregisterPushNotifications() {
   } finally {
     await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY);
   }
+}
+
+export function getStoredPushToken() {
+  return SecureStore.getItemAsync(PUSH_TOKEN_KEY);
 }
 
 export async function sendTestNotification() {

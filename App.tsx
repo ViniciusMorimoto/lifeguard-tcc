@@ -3,11 +3,11 @@ import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useFonts, Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
+import { useFonts } from 'expo-font';
 import {
-  AtkinsonHyperlegible_400Regular,
-  AtkinsonHyperlegible_700Bold,
-} from '@expo-google-fonts/atkinson-hyperlegible';
+  Montserrat_400Regular, Montserrat_500Medium, Montserrat_600SemiBold, Montserrat_700Bold,
+} from '@expo-google-fonts/montserrat';
+import { OpenSans_400Regular } from '@expo-google-fonts/open-sans';
 import AppNavigator from './src/navigation/AppNavigator';
 import { useAuthStore } from './src/store/authStore';
 import { apiRequest, ApiError } from './src/services/api';
@@ -42,9 +42,11 @@ export default function App() {
   const [fontWaitExpired, setFontWaitExpired] = useState(false);
   const restoreSession = useAuthStore((state) => state.restoreSession);
   const [fontsLoaded, fontError] = useFonts({
-    Fraunces_600SemiBold,
-    AtkinsonHyperlegible_400Regular,
-    AtkinsonHyperlegible_700Bold,
+    Montserrat_400Regular,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+    OpenSans_400Regular,
   });
 
   useEffect(() => {
