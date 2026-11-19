@@ -19,17 +19,25 @@ export function matchesDeviceSecret(secret: string, hash: string | null) {
     && timingSafeEqual(Buffer.from(hashDeviceValue(secret), 'hex'), Buffer.from(hash, 'hex')));
 }
 export function normalizeDeviceSample(sample: DeviceSample) {
-  const invalidReason = !sample.contactDetected || sample.signalQuality === 'NO_CONTACT' ? 'Sem contato com o sensor.'
+  const signalUsable = sample.contactDetected && ['GOOD', 'FAIR'].includes(sample.signalQuality);
+  const heartRate = signalUsable && sample.heartRate !== null && sample.heartRate >= 30 && sample.heartRate <= 250
+    ? sample.heartRate
+    : null;
+  const temperature = sample.temperature !== null && sample.temperature >= 30 && sample.temperature <= 45
+    ? sample.temperature
+    : null;
+  const valid = heartRate !== null || temperature !== null;
+  const invalidReason = valid ? null
+    : !sample.contactDetected || sample.signalQuality === 'NO_CONTACT' ? 'Sem contato com o sensor.'
     : !['GOOD', 'FAIR'].includes(sample.signalQuality) ? 'Qualidade de sinal insuficiente.'
     : sample.heartRate === null && sample.temperature === null ? 'Nenhuma medida disponível.'
-    : (sample.heartRate !== null && (sample.heartRate < 30 || sample.heartRate > 250))
-      || (sample.temperature !== null && (sample.temperature < 30 || sample.temperature > 45)) ? 'Medida fora da faixa técnica aceita.' : null;
+    : 'Medida fora da faixa técnica aceita.';
   return {
-    heartRate: invalidReason ? null : sample.heartRate,
-    temperature: invalidReason ? null : sample.temperature,
+    heartRate,
+    temperature,
     contactDetected: sample.contactDetected,
     signalQuality: sample.signalQuality,
-    valid: invalidReason === null,
+    valid,
     invalidReason,
   };
 }

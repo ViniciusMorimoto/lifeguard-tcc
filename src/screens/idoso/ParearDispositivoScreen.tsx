@@ -20,8 +20,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ParearDispositivo'>;
 
 export default function ParearDispositivoScreen({ navigation, route }: Props) {
   const changingNetwork = route.params?.trocarRede === true;
-  const [transport, setTransport] = useState<'wifi' | 'ble'>('wifi');
-  const [name, setName] = useState('Meu ESP32');
+  // BLE is the primary setup path: it does not make the phone switch to a
+  // Wi-Fi network without internet while credentials are being sent.
+  const [transport, setTransport] = useState<'wifi' | 'ble'>('ble');
   const [ssid, setSsid] = useState('');
   const [networks, setNetworks] = useState<WifiNetwork[]>([]);
   const [bleDevices, setBleDevices] = useState<BleDevice[]>([]);
@@ -74,7 +75,7 @@ export default function ParearDispositivoScreen({ navigation, route }: Props) {
     if (typeof Platform.Version === 'number' && Platform.Version >= 33) permissions.push(PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES);
     const result = await PermissionsAndroid.requestMultiple(permissions);
     if (!permissions.every((permission) => result[permission] === PermissionsAndroid.RESULTS.GRANTED)) {
-      throw new Error('Permita a localização e os dispositivos próximos para conectar ao ESP32.');
+      throw new Error('Permita a localização e os dispositivos próximos para conectar ao LifeGuard.');
     }
   }
 
@@ -86,7 +87,7 @@ export default function ParearDispositivoScreen({ navigation, route }: Props) {
     ];
     const result = await PermissionsAndroid.requestMultiple(permissions);
     if (!permissions.every((permission) => result[permission] === PermissionsAndroid.RESULTS.GRANTED)) {
-      throw new Error('Permita dispositivos próximos para buscar e conectar ao ESP32 por Bluetooth.');
+      throw new Error('Permita dispositivos próximos para buscar e conectar ao LifeGuard por Bluetooth.');
     }
   }
 
@@ -102,7 +103,7 @@ export default function ParearDispositivoScreen({ navigation, route }: Props) {
         await new Promise((resolve) => setTimeout(resolve, 750));
       }
       if (!connected) {
-        setError('Não conseguimos acessar o ESP32 em 192.168.4.1. Nas configurações de Wi-Fi, conecte-se à rede LIFEGUARD-ESP32 e escolha permanecer conectado mesmo sem internet.');
+        setError('Não foi possível encontrar o LifeGuard. Conecte-se à rede Wi-Fi LIFEGUARD e permaneça conectado mesmo sem internet.');
         return;
       }
       waitingForWifiRef.current = false;
@@ -118,13 +119,13 @@ export default function ParearDispositivoScreen({ navigation, route }: Props) {
   }
 
   async function connectToAccessPoint() {
-    if (Platform.OS !== 'android' || !LifeguardWifi) return setError('A configuração do ESP32 está disponível no aplicativo Android instalado.');
+    if (Platform.OS !== 'android' || !LifeguardWifi) return setError('A configuração do LifeGuard está disponível no aplicativo Android instalado.');
     setTransport('wifi');
     setLoading(true); setError('');
     try {
       await requestWifiPermissions();
       if (typeof Platform.Version === 'number' && Platform.Version >= 29) {
-        await LifeguardWifi.connectToDeviceAsync('LIFEGUARD-ESP32');
+        await LifeguardWifi.connectToDeviceAsync('LIFEGUARD');
         waitingForWifiRef.current = false;
         setWaitingForWifi(false);
         setDeviceConnected(true);
@@ -134,7 +135,7 @@ export default function ParearDispositivoScreen({ navigation, route }: Props) {
       setWaitingForWifi(true);
       await LifeguardWifi.openWifiSettingsAsync();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Não foi possível conectar ao ESP32.');
+      setError(e instanceof Error ? e.message : 'Não foi possível conectar ao LifeGuard.');
     } finally { setLoading(false); }
   }
 
@@ -157,7 +158,7 @@ export default function ParearDispositivoScreen({ navigation, route }: Props) {
       await requestBluetoothPermissions();
       const foundDevices = await LifeguardWifi.scanBleDevicesAsync();
       setBleDevices(foundDevices);
-      if (foundDevices.length === 0) setError('Nenhum ESP32 encontrado. Ligue o dispositivo e tente novamente.');
+      if (foundDevices.length === 0) setError('Nenhum LifeGuard encontrado. Ligue o dispositivo e tente novamente.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível buscar dispositivos Bluetooth.');
     } finally { setScanningBle(false); }
@@ -171,41 +172,45 @@ export default function ParearDispositivoScreen({ navigation, route }: Props) {
       await LifeguardWifi.connectBleDeviceAsync(device.id);
       setDeviceConnected(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Não foi possível conectar ao ESP32 por Bluetooth.');
+      setError(e instanceof Error ? e.message : 'Não foi possível conectar ao LifeGuard por Bluetooth.');
     } finally { setLoading(false); }
   }
 
   async function sendConfiguration() {
     if (loading) return;
-    if (!deviceConnected) return setError('Conecte-se primeiro ao ESP32.');
-    if (!changingNetwork && name.trim().length < 2) return setError('Informe um nome com pelo menos dois caracteres.');
-    if (!ssid.trim()) return setError('Escolha a rede Wi-Fi.');
+    if (!deviceConnected) return setError('Conecte-se primeiro ao LifeGuard.');
+    // Native Expo modules reject an omitted argument before the Kotlin method
+    // runs. Normalize all values here because a native TextInput/event can
+    // still yield undefined at runtime despite the TypeScript state type.
+    const networkSsid = typeof ssid === 'string' ? ssid.trim() : '';
+    const networkPassword = typeof password === 'string' ? password : '';
+    if (!networkSsid) return setError('Escolha a rede Wi-Fi.');
     setLoading(true); setError('');
     try {
       let credential = '';
       if (!changingNetwork) {
-        const deviceName = name.trim();
+        const deviceName = 'LifeGuard';
         credential = credentialName === deviceName ? deviceCredential : '';
         if (!credential) {
           const result = await apiRequest<{ credencial: string | null }>('/dispositivos/provisionar', {
             method: 'POST',
             body: JSON.stringify({ nome: deviceName }),
           });
-          credential = result.credencial ?? '';
-          if (!credential) throw new Error('O servidor não gerou a credencial do dispositivo.');
+          credential = typeof result?.credencial === 'string' ? result.credencial : '';
+          if (!credential) throw new Error('Não foi possível vincular o LifeGuard à sua conta. Tente novamente.');
           setDeviceCredential(credential);
           setCredentialName(deviceName);
         }
       }
       if (transport === 'wifi') {
-        await LifeguardWifi!.provisionDeviceAsync(ssid.trim(), password, credential);
+        await LifeguardWifi!.provisionDeviceAsync(networkSsid, networkPassword, credential || '');
       } else {
-        await LifeguardWifi!.provisionBleDeviceAsync(ssid.trim(), password, credential);
+        await LifeguardWifi!.provisionBleDeviceAsync(networkSsid, networkPassword, credential || '');
       }
-      Alert.alert('Configuração enviada', 'O ESP32 vai se conectar à rede escolhida. Aguarde até 90 segundos para o sinal aparecer.');
+      Alert.alert('Configuração enviada', 'O LifeGuard vai se conectar à rede escolhida. Aguarde até 90 segundos para o sinal aparecer.');
       navigation.goBack();
     } catch (e) {
-      setError(e instanceof ApiError || e instanceof Error ? e.message : 'Não foi possível enviar a configuração ao ESP32.');
+      setError(e instanceof ApiError || e instanceof Error ? e.message : 'Não foi possível enviar a configuração ao LifeGuard.');
     } finally {
       setLoading(false);
     }
@@ -226,33 +231,33 @@ export default function ParearDispositivoScreen({ navigation, route }: Props) {
     <BackHeader title={changingNetwork ? 'Alterar rede Wi-Fi' : 'Conectar dispositivo'} onBack={() => { if (!loading) navigation.goBack(); }} />
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}><ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.icon}><MaterialCommunityIcons name="wifi-cog" size={26} color={colors.white} /></View>
-      <Text style={styles.title}>{changingNetwork ? 'Atualize o Wi-Fi do seu ESP32' : 'Conecte seu dispositivo'}</Text>
-      <Text style={styles.subtitle}>Escolha como o celular vai se conectar ao ESP32 para enviar a configuração. Depois, o ESP32 usa a rede Wi-Fi escolhida para se conectar.</Text>
+      <Text style={styles.title}>{changingNetwork ? 'Atualize o Wi-Fi do LifeGuard' : 'Conecte seu LifeGuard'}</Text>
+      <Text style={styles.subtitle}>Escolha como o celular vai se conectar ao LifeGuard para enviar a configuração. Depois, ele usará a rede Wi-Fi escolhida para se conectar.</Text>
+      {changingNetwork ? <InlineNotice message="Se a rede LIFEGUARD não aparecer, mantenha o botão BOOT do dispositivo pressionado por 3 segundos para reabrir a configuração e tente novamente." /> : null}
       <SegmentedToggle
         value={transport}
         onChange={(value) => void selectTransport(value)}
         disabled={loading || scanningBle}
         options={[
-          { value: 'wifi', label: 'Ponto de acesso' },
           { value: 'ble', label: 'Bluetooth (BLE)' },
+          { value: 'wifi', label: 'Ponto de acesso' },
         ]}
       />
       {transport === 'wifi' ? (
-        <Card><Text style={styles.section}>1. Conectar pelo ponto de acesso</Text><View style={styles.hint}><MaterialCommunityIcons name={deviceConnected ? 'check-circle' : 'access-point-network'} size={20} color={colors.inkSoft} /><Text style={styles.hintText}>{deviceConnected ? 'Conectado ao ESP32. Agora informe a rede Wi-Fi que ele deve usar.' : waitingForWifi ? 'Nas configurações do celular, conecte-se à rede LIFEGUARD-ESP32, permaneça conectado sem internet e volte para cá.' : 'Conecte o celular à rede LIFEGUARD-ESP32. Em Android 10 ou superior, aceite o pedido de conexão; em aparelhos antigos, selecione a rede nas configurações.'}</Text></View>
-          <AppButton label={deviceConnected ? 'Conectado ao ESP32' : loading ? 'Conectando ao ESP32...' : typeof Platform.Version === 'number' && Platform.Version >= 29 ? 'Conectar ao LIFEGUARD-ESP32' : 'Abrir configurações de Wi-Fi'} icon={deviceConnected ? 'check' : 'wifi'} variant="secondary" onPress={() => void connectToAccessPoint()} loading={loading} disabled={loading || deviceConnected} />
-          {waitingForWifi && !deviceConnected ? <AppButton label="Já me conectei ao LIFEGUARD-ESP32" icon="check" variant="text" onPress={() => void confirmAccessPointConnection()} loading={loading} disabled={loading} /> : null}
+        <Card><Text style={styles.section}>1. Conectar pelo ponto de acesso</Text><View style={styles.hint}><MaterialCommunityIcons name={deviceConnected ? 'check-circle' : 'access-point-network'} size={20} color={colors.inkSoft} /><Text style={styles.hintText}>{deviceConnected ? 'Conectado ao LifeGuard. Agora informe a rede Wi-Fi que ele deve usar.' : waitingForWifi ? 'Nas configurações do celular, conecte-se à rede LIFEGUARD, permaneça conectado sem internet e volte para cá.' : 'Conecte o celular à rede LIFEGUARD. Em Android 10 ou superior, aceite o pedido de conexão; em aparelhos antigos, selecione a rede nas configurações.'}</Text></View>
+          <AppButton label={deviceConnected ? 'Conectado ao LifeGuard' : loading ? 'Conectando ao LifeGuard...' : typeof Platform.Version === 'number' && Platform.Version >= 29 ? 'Conectar ao LIFEGUARD' : 'Abrir configurações de Wi-Fi'} icon={deviceConnected ? 'check' : 'wifi'} variant="secondary" onPress={() => void connectToAccessPoint()} loading={loading} disabled={loading || deviceConnected} />
+          {waitingForWifi && !deviceConnected ? <AppButton label="Já me conectei ao LIFEGUARD" icon="check" variant="text" onPress={() => void confirmAccessPointConnection()} loading={loading} disabled={loading} /> : null}
         </Card>
       ) : (
-        <Card><Text style={styles.section}>1. Conectar por Bluetooth</Text><View style={styles.hint}><MaterialCommunityIcons name="bluetooth" size={20} color={colors.inkSoft} /><Text style={styles.hintText}>{deviceConnected ? 'Conectado ao ESP32 por Bluetooth. Agora informe a rede Wi-Fi que ele deve usar.' : 'Ative o Bluetooth do celular e busque o ESP32 próximo.'}</Text></View>
-          <AppButton label={scanningBle ? 'Buscando ESP32...' : 'Buscar ESP32 por BLE'} icon="bluetooth-settings" variant="secondary" onPress={() => void scanBleDevices()} loading={scanningBle} disabled={loading || deviceConnected} />
+        <Card><Text style={styles.section}>1. Conectar por Bluetooth</Text><View style={styles.hint}><MaterialCommunityIcons name="bluetooth" size={20} color={colors.inkSoft} /><Text style={styles.hintText}>{deviceConnected ? 'Conectado ao LifeGuard por Bluetooth. Agora informe a rede Wi-Fi que ele deve usar.' : 'Ative o Bluetooth do celular e busque o LifeGuard próximo.'}</Text></View>
+          <AppButton label={scanningBle ? 'Buscando LifeGuard...' : 'Buscar LifeGuard por BLE'} icon="bluetooth-settings" variant="secondary" onPress={() => void scanBleDevices()} loading={scanningBle} disabled={loading || deviceConnected} />
           {bleDevices.map((device) => <Pressable key={device.id} style={styles.bleDevice} onPress={() => void connectBleDevice(device)} disabled={loading || deviceConnected} accessibilityRole="button">
             <MaterialCommunityIcons name="bluetooth" size={20} color={colors.ink} /><Text style={styles.bleDeviceName}>{device.name}</Text><MaterialCommunityIcons name="chevron-right" size={22} color={colors.inkSoft} />
           </Pressable>)}
         </Card>
       )}
-      <Card style={!deviceConnected ? styles.locked : undefined}><Text style={styles.section}>2. Rede do dispositivo</Text>{!deviceConnected ? <InlineNotice message="Conecte-se ao ESP32 para liberar os dados da rede." /> : <><Text style={styles.label}>Nome da rede (SSID) <Text style={styles.required}>*</Text></Text><Pressable style={styles.selector} onPress={() => void scanNetworks()} accessibilityRole="button"><MaterialCommunityIcons name="wifi" size={22} color={colors.inkSoft} /><Text numberOfLines={1} style={[styles.selectorText, !ssid && styles.placeholder]}>{ssid || 'Escolha uma rede próxima'}</Text><MaterialCommunityIcons name={scanning ? 'progress-clock' : 'chevron-down'} size={22} color={colors.inkSoft} /></Pressable><Text style={styles.help}>As redes são ordenadas pela intensidade do sinal.</Text><AppTextInput label="Senha do Wi-Fi" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} autoCapitalize="none" maxLength={64} /><Text onPress={() => setShowPassword((value) => !value)} style={styles.show}>{showPassword ? 'Ocultar senha' : 'Mostrar senha'}</Text></>}</Card>
-      {!changingNetwork ? <Card style={!deviceConnected ? styles.locked : undefined}><Text style={styles.section}>3. Identificação</Text><AppTextInput label="Nome do dispositivo" value={name} onChangeText={setName} maxLength={60} required editable={deviceConnected} /></Card> : null}
-      {error ? <InlineNotice tone="warning" message={error} /> : null}<InlineNotice message="A senha do Wi-Fi é enviada somente ao ESP32 pela conexão local. O servidor recebe o nome e gera a credencial do dispositivo, que também é transferida ao ESP32 localmente." /><AppButton label={changingNetwork ? 'Enviar nova rede' : 'Configurar ESP32'} onPress={() => void sendConfiguration()} loading={loading} disabled={!deviceConnected} />
+      <Card style={!deviceConnected ? styles.locked : undefined}><Text style={styles.section}>2. Rede do dispositivo</Text>{!deviceConnected ? <InlineNotice message="Conecte-se ao LifeGuard para liberar os dados da rede." /> : <><Text style={styles.label}>Nome da rede (SSID) <Text style={styles.required}>*</Text></Text><Pressable style={styles.selector} onPress={() => void scanNetworks()} accessibilityRole="button"><MaterialCommunityIcons name="wifi" size={22} color={colors.inkSoft} /><Text numberOfLines={1} style={[styles.selectorText, !ssid && styles.placeholder]}>{ssid || 'Escolha uma rede próxima'}</Text><MaterialCommunityIcons name={scanning ? 'progress-clock' : 'chevron-down'} size={22} color={colors.inkSoft} /></Pressable><Text style={styles.help}>As redes são ordenadas pela intensidade do sinal.</Text><AppTextInput label="Senha do Wi-Fi" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} autoCapitalize="none" maxLength={64} /><Text onPress={() => setShowPassword((value) => !value)} style={styles.show}>{showPassword ? 'Ocultar senha' : 'Mostrar senha'}</Text></>}</Card>
+      {error ? <InlineNotice tone="warning" message={error} /> : null}<InlineNotice message="A senha do Wi-Fi é enviada somente ao LifeGuard." /><AppButton label={changingNetwork ? 'Enviar nova rede' : 'Configurar LifeGuard'} onPress={() => void sendConfiguration()} loading={loading} disabled={!deviceConnected} />
     </ScrollView></KeyboardAvoidingView>
     <WifiNetworkPicker visible={pickerVisible} networks={networks} selectedSsid={ssid} refreshing={scanning} onClose={() => setPickerVisible(false)} onRefresh={() => void scanNetworks()} onSelect={(value) => { setSsid(value); setPickerVisible(false); setError(''); }} />
   </SafeAreaView>;

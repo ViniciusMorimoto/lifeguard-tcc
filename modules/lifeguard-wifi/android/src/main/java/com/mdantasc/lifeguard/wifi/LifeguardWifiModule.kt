@@ -56,7 +56,7 @@ class LifeguardWifiModule : Module() {
 
     AsyncFunction<List<Map<String, Any>>>("scanNetworksAsync") {
       val context = appContext.reactContext
-        ?: throw IllegalStateException("O contexto do aplicativo não está disponível.")
+        ?: throw IllegalStateException("Reabra o aplicativo e tente novamente.")
       val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         ?: throw IllegalStateException("O Wi-Fi não está disponível neste aparelho.")
 
@@ -82,7 +82,7 @@ class LifeguardWifiModule : Module() {
         throw IllegalStateException("A conexão com o ponto de acesso requer Android 10 ou superior.")
       }
       val context = appContext.reactContext
-        ?: throw IllegalStateException("O contexto do aplicativo não está disponível.")
+        ?: throw IllegalStateException("Reabra o aplicativo e tente novamente.")
       val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
       disconnect(connectivity)
       val request = NetworkRequest.Builder()
@@ -104,7 +104,7 @@ class LifeguardWifiModule : Module() {
               override fun onUnavailable() {
                 if (continuation.isActive) {
                   continuation.resumeWithException(
-                    IllegalStateException("Não foi possível conectar ao ponto de acesso do ESP32. Confirme que ele está ligado e tente novamente.")
+                    IllegalStateException("Não foi possível conectar ao ponto de acesso do LifeGuard. Confirme que ele está ligado e tente novamente.")
                   )
                 }
               }
@@ -112,7 +112,7 @@ class LifeguardWifiModule : Module() {
               override fun onLost(network: Network) {
                 if (deviceNetwork == network) deviceNetwork = null
                 if (continuation.isActive) {
-                  continuation.resumeWithException(IllegalStateException("A conexão Wi-Fi com o ESP32 foi interrompida."))
+                  continuation.resumeWithException(IllegalStateException("A conexão Wi-Fi com o LifeGuard foi interrompida."))
                 }
               }
             }
@@ -124,7 +124,7 @@ class LifeguardWifiModule : Module() {
       } catch (error: Throwable) {
         disconnect(connectivity)
         if (error is kotlinx.coroutines.TimeoutCancellationException) {
-          throw IllegalStateException("Tempo esgotado ao conectar ao ESP32. Confirme que a rede LIFEGUARD-ESP32 está ativa.")
+          throw IllegalStateException("Tempo esgotado ao conectar ao LifeGuard. Confirme que a rede LIFEGUARD está ativa.")
         }
         throw error
       }
@@ -132,7 +132,7 @@ class LifeguardWifiModule : Module() {
 
     AsyncFunction("openWifiSettingsAsync") {
       val context = appContext.reactContext
-        ?: throw IllegalStateException("O contexto do aplicativo não está disponível.")
+        ?: throw IllegalStateException("Reabra o aplicativo e tente novamente.")
       val intent = Intent(Settings.ACTION_WIFI_SETTINGS)
       val activity = appContext.currentActivity
       if (activity != null) {
@@ -144,7 +144,7 @@ class LifeguardWifiModule : Module() {
 
     AsyncFunction("checkDeviceWifiConnectionAsync") Coroutine { ->
       val context = appContext.reactContext
-        ?: throw IllegalStateException("O contexto do aplicativo não está disponível.")
+        ?: throw IllegalStateException("Reabra o aplicativo e tente novamente.")
       val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
       val wifiNetworks = connectivity.allNetworks.filter { network ->
         val capabilities = connectivity.getNetworkCapabilities(network) ?: return@filter false
@@ -173,7 +173,7 @@ class LifeguardWifiModule : Module() {
     }
 
     AsyncFunction("provisionDeviceAsync") { ssid: String, password: String, credential: String ->
-      val network = deviceNetwork ?: throw IllegalStateException("Conecte-se primeiro ao ponto de acesso do ESP32.")
+      val network = deviceNetwork ?: throw IllegalStateException("Conecte-se primeiro ao ponto de acesso do LifeGuard.")
       val body = listOf("ssid" to ssid, "password" to password, "credential" to credential)
         .joinToString("&") { (key, value) -> "${URLEncoder.encode(key, "UTF-8")}=${URLEncoder.encode(value, "UTF-8")}" }
       val connection = (network.openConnection(URL("http://192.168.4.1/provision")) as HttpURLConnection).apply {
@@ -186,7 +186,7 @@ class LifeguardWifiModule : Module() {
       try {
         OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { it.write(body) }
         if (connection.responseCode !in 200..299) {
-          throw IllegalStateException("O ESP32 recusou a configuração. Confira os dados e tente novamente.")
+          throw IllegalStateException("O LifeGuard recusou a configuração. Confira os dados e tente novamente.")
         }
       } finally {
         connection.disconnect()
@@ -195,11 +195,11 @@ class LifeguardWifiModule : Module() {
 
     AsyncFunction("scanBleDevicesAsync") Coroutine { ->
       val context = appContext.reactContext
-        ?: throw IllegalStateException("O contexto do aplicativo não está disponível.")
+        ?: throw IllegalStateException("Reabra o aplicativo e tente novamente.")
       requireBluetoothPermission(context, Manifest.permission.BLUETOOTH_SCAN)
       requireBluetoothPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
       val adapter = bluetoothAdapter(context)
-      if (!adapter.isEnabled) throw IllegalStateException("Ative o Bluetooth do celular para buscar o ESP32.")
+      if (!adapter.isEnabled) throw IllegalStateException("Ative o Bluetooth do celular para buscar o LifeGuard.")
       val scanner = adapter.bluetoothLeScanner
         ?: throw IllegalStateException("O Bluetooth Low Energy não está disponível neste aparelho.")
       val devices = ConcurrentHashMap<String, Map<String, String>>()
@@ -208,7 +208,7 @@ class LifeguardWifiModule : Module() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
           devices[result.device.address] = mapOf(
             "id" to result.device.address,
-            "name" to (result.scanRecord?.deviceName ?: "LIFEGUARD-ESP32")
+            "name" to (result.scanRecord?.deviceName ?: "LIFEGUARD")
           )
         }
 
@@ -225,7 +225,7 @@ class LifeguardWifiModule : Module() {
         )
         delay(8_000)
         val errorCode = scanFailure.get()
-        if (errorCode != 0) throw IllegalStateException("A busca Bluetooth falhou (código $errorCode).")
+        if (errorCode != 0) throw IllegalStateException("Não foi possível buscar o LifeGuard. Confira se o Bluetooth está ligado e tente novamente.")
         devices.values.sortedBy { it["name"] }
       } finally {
         scanner.stopScan(callback)
@@ -234,10 +234,10 @@ class LifeguardWifiModule : Module() {
 
     AsyncFunction("connectBleDeviceAsync") Coroutine { address: String ->
       val context = appContext.reactContext
-        ?: throw IllegalStateException("O contexto do aplicativo não está disponível.")
+        ?: throw IllegalStateException("Reabra o aplicativo e tente novamente.")
       requireBluetoothPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
       val adapter = bluetoothAdapter(context)
-      if (!adapter.isEnabled) throw IllegalStateException("Ative o Bluetooth do celular para conectar ao ESP32.")
+      if (!adapter.isEnabled) throw IllegalStateException("Ative o Bluetooth do celular para conectar ao LifeGuard.")
       disconnectBle()
 
       try {
@@ -247,11 +247,11 @@ class LifeguardWifiModule : Module() {
             val callback = object : BluetoothGattCallback() {
               override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                  failBleConnect(IllegalStateException("Falha na conexão Bluetooth com o ESP32 (código $status)."))
+                  failBleConnect(IllegalStateException("Não foi possível conectar por Bluetooth. Aproxime o celular do LifeGuard e tente novamente."))
                 } else if (newState == BluetoothProfile.STATE_CONNECTED) {
                   if (!gatt.requestMtu(185)) gatt.discoverServices()
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED && continuation.isActive) {
-                  failBleConnect(IllegalStateException("A conexão Bluetooth com o ESP32 foi encerrada."))
+                  failBleConnect(IllegalStateException("A conexão Bluetooth com o LifeGuard foi encerrada."))
                 }
               }
 
@@ -262,7 +262,7 @@ class LifeguardWifiModule : Module() {
               override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
                 val characteristic = gatt.getService(bleServiceUuid)?.getCharacteristic(bleCommandUuid)
                 if (status != BluetoothGatt.GATT_SUCCESS || characteristic == null) {
-                  failBleConnect(IllegalStateException("O serviço de configuração BLE não foi encontrado no ESP32."))
+                  failBleConnect(IllegalStateException("Não foi possível configurar este dispositivo por Bluetooth. Tente pelo ponto de acesso."))
                   return
                 }
                 bleGatt = gatt
@@ -280,16 +280,16 @@ class LifeguardWifiModule : Module() {
                 bleWriteContinuation = null
                 if (status == BluetoothGatt.GATT_SUCCESS) pending.resume(Unit)
                 else pending.resumeWithException(
-                  IllegalStateException("O ESP32 não confirmou o envio Bluetooth (código $status).")
+                  IllegalStateException("O LifeGuard não confirmou o recebimento. Tente enviar novamente.")
                 )
               }
             }
             try {
               bleGatt = adapter.getRemoteDevice(address)
                 .connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-                ?: throw IllegalStateException("Não foi possível iniciar a conexão Bluetooth com o ESP32.")
+                ?: throw IllegalStateException("Não foi possível iniciar a conexão Bluetooth com o LifeGuard.")
             } catch (error: SecurityException) {
-              throw IllegalStateException("Permita o acesso a dispositivos próximos para conectar ao ESP32.", error)
+              throw IllegalStateException("Permita o acesso a dispositivos próximos para conectar ao LifeGuard.", error)
             }
             continuation.invokeOnCancellation { disconnectBle() }
           }
@@ -297,7 +297,7 @@ class LifeguardWifiModule : Module() {
       } catch (error: Throwable) {
         disconnectBle()
         if (error is kotlinx.coroutines.TimeoutCancellationException) {
-          throw IllegalStateException("Tempo esgotado ao conectar por Bluetooth. Tente buscar o ESP32 novamente.")
+          throw IllegalStateException("Tempo esgotado ao conectar por Bluetooth. Tente buscar o LifeGuard novamente.")
         }
         throw error
       }
@@ -305,7 +305,7 @@ class LifeguardWifiModule : Module() {
 
     AsyncFunction("provisionBleDeviceAsync") Coroutine { ssid: String, password: String, credential: String ->
       if (bleGatt == null || bleCommandCharacteristic == null) {
-        throw IllegalStateException("Conecte-se primeiro ao ESP32 por Bluetooth.")
+        throw IllegalStateException("Conecte-se primeiro ao LifeGuard por Bluetooth.")
       }
       writeBleCommand("SSID=$ssid")
       writeBleCommand("PASSWORD=$password")
@@ -342,11 +342,11 @@ class LifeguardWifiModule : Module() {
   }
 
   private suspend fun writeBleCommand(command: String) {
-    val gatt = bleGatt ?: throw IllegalStateException("Conecte-se primeiro ao ESP32 por Bluetooth.")
+    val gatt = bleGatt ?: throw IllegalStateException("Conecte-se primeiro ao LifeGuard por Bluetooth.")
     val characteristic = bleCommandCharacteristic
-      ?: throw IllegalStateException("O serviço de configuração BLE não está disponível.")
+      ?: throw IllegalStateException("Reconecte o LifeGuard por Bluetooth e tente novamente.")
     val value = command.toByteArray(Charsets.UTF_8)
-    if (value.size > 182) throw IllegalArgumentException("Os dados enviados ao ESP32 excedem o limite Bluetooth.")
+    if (value.size > 182) throw IllegalArgumentException("Os dados enviados ao LifeGuard excedem o limite Bluetooth.")
 
     try {
       withTimeout(12_000) {
@@ -368,7 +368,7 @@ class LifeguardWifiModule : Module() {
           }
           if (!started) {
             bleWriteContinuation = null
-            continuation.resumeWithException(IllegalStateException("Não foi possível enviar os dados ao ESP32 por Bluetooth."))
+            continuation.resumeWithException(IllegalStateException("Não foi possível enviar os dados ao LifeGuard por Bluetooth."))
           }
           continuation.invokeOnCancellation { bleWriteContinuation = null }
         }

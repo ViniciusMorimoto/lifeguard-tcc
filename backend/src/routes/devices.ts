@@ -19,13 +19,16 @@ const deviceSelect = { id: true, nickname: true, hardwareCode: true, lastSeenAt:
 
 devicesRouter.get('/me', requireAuth, patientOnly, async (req, res) => {
   const device = await prisma.device.findFirst({ where: { elderId: req.auth!.userId, active: true }, select: deviceSelect, orderBy: { pairedAt: 'desc' } });
-  res.json({ dispositivo: device ? { ...device, conectado: !!device.lastSeenAt && Date.now() - device.lastSeenAt.getTime() <= DEVICE_STALE_MS } : null });
+  res.json({ dispositivo: device ? { ...device, nickname: 'LifeGuard', conectado: !!device.lastSeenAt && Date.now() - device.lastSeenAt.getTime() <= DEVICE_STALE_MS } : null });
 });
 
 // Manual provisioning for the prototype: the patient transfers this one-time
 // credential to their own firmware. A serial number alone grants no access.
 devicesRouter.post('/provisionar', requireAuth, patientOnly, manageLimit, async (req, res) => {
-  const { nome, modo } = z.object({ nome: z.string().trim().min(2).max(60), modo: z.enum(['real', 'simulador']).default('real') }).strict().parse(req.body);
+  const { modo } = z.object({
+    nome: z.literal('LifeGuard').optional(),
+    modo: z.enum(['real', 'simulador']).default('real'),
+  }).strict().parse(req.body);
   const secret = newDeviceSecret();
   const device = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${req.auth!.userId}::uuid FOR UPDATE`;
@@ -33,7 +36,7 @@ devicesRouter.post('/provisionar', requireAuth, patientOnly, manageLimit, async 
     if (current) {
       throw new HttpError(409, 'Cada paciente pode ter apenas um dispositivo. Desconecte o atual antes de configurar outro.', 'DEVICE_LIMIT_REACHED');
     }
-    return tx.device.create({ data: { elderId: req.auth!.userId, nickname: nome, hardwareCode: `LG-${randomUUID()}`, isSimulator: modo === 'simulador', credentialHash: modo === 'real' ? hashDeviceValue(secret) : null }, select: deviceSelect });
+    return tx.device.create({ data: { elderId: req.auth!.userId, nickname: 'LifeGuard', hardwareCode: `LG-${randomUUID()}`, isSimulator: modo === 'simulador', credentialHash: modo === 'real' ? hashDeviceValue(secret) : null }, select: deviceSelect });
   });
   res.status(201).json({ dispositivo: device, credencial: modo === 'real' ? `lgd_${device.id}.${secret}` : null });
 });
@@ -69,7 +72,7 @@ devicesRouter.post('/me/simular', requireAuth, patientOnly, simulationLimit, asy
   const sample: DeviceSample = {
     sampleId: randomUUID(), timestamp: new Date().toISOString(),
     heartRate: cenario === 'sem_contato' ? 220 : cenario === 'alto' ? Math.min(240, (limits?.heartRateMaximum ?? 120) + 10) : Math.round(((limits?.heartRateMinimum ?? 50) + (limits?.heartRateMaximum ?? 120)) / 2),
-    temperature: limits ? (limits.temperatureMinimum + limits.temperatureMaximum) / 2 : 36.5,
+    temperature: cenario === 'sem_contato' ? null : limits ? (limits.temperatureMinimum + limits.temperatureMaximum) / 2 : 36.5,
     contactDetected: cenario !== 'sem_contato', signalQuality: cenario === 'sem_contato' ? 'NO_CONTACT' : 'GOOD',
   };
   const result = await storeSample(candidate, sample, (device) => device.isSimulator && device.elderId === req.auth!.userId);

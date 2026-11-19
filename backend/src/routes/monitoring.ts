@@ -95,7 +95,7 @@ monitoringRouter.get('/idosos', async (req, res) => {
           devices: {
             where: { active: true },
             take: 1,
-            include: { readings: { where: { valid: true }, orderBy: { timestamp: 'desc' }, take: 1 } },
+            include: { readings: { where: { OR: [{ heartRate: { not: null } }, { temperature: { not: null } }] }, orderBy: { timestamp: 'desc' }, take: 1 } },
           },
         },
       },
@@ -137,7 +137,7 @@ monitoringRouter.get('/idosos/:idosoId', async (req, res) => {
       devices: {
         where: { active: true },
         take: 1,
-        include: { readings: { where: { valid: true }, orderBy: { timestamp: 'desc' }, take: 1 } },
+        include: { readings: { where: { OR: [{ heartRate: { not: null } }, { temperature: { not: null } }] }, orderBy: { timestamp: 'desc' }, take: 1 } },
       },
     },
   });
@@ -189,9 +189,9 @@ monitoringRouter.get('/idosos/:idosoId/leituras', async (req, res) => {
       temperaturaMinima: bucket.temperatureMinimum,
       temperaturaMaxima: bucket.temperatureMaximum,
       horario: bucket.timestamp,
-      qualidadeSinal: bucket.sampleCount ? 'good' : 'no_contact',
-      contatoDetectado: bucket.sampleCount > 0,
-      valida: bucket.sampleCount > 0,
+      qualidadeSinal: bucket.heartRateAverage !== null ? 'good' : 'no_contact',
+      contatoDetectado: bucket.heartRateAverage !== null,
+      valida: bucket.sampleCount > 0 || bucket.temperatureAverage !== null,
       motivoInvalido: null,
       origem: 'aggregate',
     })) });
@@ -209,9 +209,9 @@ monitoringRouter.get('/idosos/:idosoId/leituras', async (req, res) => {
   }>>`
     SELECT
       date_trunc('hour', reading."timestamp") AS horario,
-      AVG(reading."heartRate")::double precision AS batimento,
-      MIN(reading."heartRate") AS "batimentoMinimo",
-      MAX(reading."heartRate") AS "batimentoMaximo",
+      (AVG(reading."heartRate") FILTER (WHERE reading.valid))::double precision AS batimento,
+      MIN(reading."heartRate") FILTER (WHERE reading.valid) AS "batimentoMinimo",
+      MAX(reading."heartRate") FILTER (WHERE reading.valid) AS "batimentoMaximo",
       AVG(reading."temperature") AS temperatura,
       MIN(reading."temperature") AS "temperaturaMinima",
       MAX(reading."temperature") AS "temperaturaMaxima",
@@ -219,7 +219,7 @@ monitoringRouter.get('/idosos/:idosoId/leituras', async (req, res) => {
     FROM "Reading" reading
     INNER JOIN "Device" device ON device.id = reading."deviceId"
     WHERE device."elderId" = ${elderId}::uuid
-      AND reading.valid = true
+      AND (reading.valid OR reading."temperature" BETWEEN 30 AND 45)
       AND reading."timestamp" >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - (${query.limite} * INTERVAL '1 hour')
     GROUP BY date_trunc('hour', reading."timestamp")
     ORDER BY horario DESC
@@ -234,8 +234,8 @@ monitoringRouter.get('/idosos/:idosoId/leituras', async (req, res) => {
     temperaturaMinima: item.temperaturaMinima,
     temperaturaMaxima: item.temperaturaMaxima,
     horario: item.horario,
-    qualidadeSinal: 'good',
-    contatoDetectado: true,
+    qualidadeSinal: item.batimento !== null ? 'good' : 'no_contact',
+    contatoDetectado: item.batimento !== null,
     valida: Number(item.quantidade) > 0,
     motivoInvalido: null,
     origem: 'aggregate',

@@ -48,7 +48,7 @@ export default function MeuDispositivoScreen({ navigation }: Props) {
   function revoke() {
     Alert.alert(
       'Desconectar dispositivo?',
-      'A credencial será revogada e o ESP32 não poderá mais enviar leituras. O histórico será preservado.',
+      'O LifeGuard deixará de enviar leituras para sua conta. Você ainda poderá consultar o histórico.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -84,7 +84,7 @@ export default function MeuDispositivoScreen({ navigation }: Props) {
               <Text style={styles.heading}>
                 {error ? 'Estado indisponível' : device?.conectado ? 'Sinal recebido' : device ? 'Aguardando sinal' : 'Nenhum dispositivo configurado'}
               </Text>
-              <Text style={styles.text}>{device ? device.nickname : 'Configure seu ESP32 para começar a receber leituras.'}</Text>
+              <Text style={styles.text}>{device ? 'LifeGuard' : 'Configure seu LifeGuard para começar a receber leituras.'}</Text>
               {device ? <Text style={styles.text}>Último contato: {device.lastSeenAt ? formatDateTime(device.lastSeenAt) : 'ainda não recebido'}</Text> : null}
               {device && !device.lastSeenAt ? <Text style={styles.text}>Aguardando a primeira leitura. Confira se o dispositivo está ligado e conectado à rede Wi-Fi configurada.</Text> : null}
             </Card>

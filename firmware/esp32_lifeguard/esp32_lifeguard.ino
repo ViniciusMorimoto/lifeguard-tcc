@@ -20,7 +20,9 @@ constexpr uint8_t DS18B20_PIN = 5;
 constexpr uint16_t PULSE_THRESHOLD = 550;
 constexpr unsigned long SAMPLE_INTERVAL_MS = 5000;
 constexpr unsigned long WIFI_RETRY_MS = 10'000;
-constexpr char PROVISIONING_NAME[] = "LIFEGUARD-ESP32";
+constexpr uint8_t BOOT_BUTTON_PIN = 0;
+constexpr unsigned long RESET_CONNECTION_HOLD_MS = 3000;
+constexpr char PROVISIONING_NAME[] = "LIFEGUARD";
 constexpr char BLE_SERVICE_UUID[] = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 constexpr char BLE_DATA_UUID[] = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 constexpr char BLE_COMMAND_UUID[] = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
@@ -51,6 +53,9 @@ bool setupActive = false;
 bool wifiAttempted = false;
 bool wifiWasConnected = false;
 bool clockSyncAttempted = false;
+bool bootButtonArmed = false;
+bool connectionResetDone = false;
+unsigned long bootButtonPressedAt = 0;
 BLECharacteristic *bleDataCharacteristic = nullptr;
 bool bleClientConnected = false;
 
@@ -176,7 +181,7 @@ void startSetup() {
   });
   setupServer.begin();
   setupActive = true;
-  Serial.println("Configuracao pelo app: Wi-Fi LIFEGUARD-ESP32 em 192.168.4.1 ou Bluetooth BLE.");
+  Serial.println("Configuracao pelo app: Wi-Fi LIFEGUARD em 192.168.4.1 ou Bluetooth BLE.");
 }
 
 bool syncClock() {
@@ -266,8 +271,35 @@ void updatePulse() {
   }
 }
 
+void checkBootButton() {
+  const bool pressed = digitalRead(BOOT_BUTTON_PIN) == LOW;
+  if (!bootButtonArmed) {
+    if (!pressed) bootButtonArmed = true;
+    return;
+  }
+  if (!pressed) {
+    bootButtonPressedAt = 0;
+    connectionResetDone = false;
+    return;
+  }
+  if (bootButtonPressedAt == 0) bootButtonPressedAt = millis();
+  if (connectionResetDone || millis() - bootButtonPressedAt < RESET_CONNECTION_HOLD_MS) return;
+
+  connectionResetDone = true;
+  wifiSsid = "";
+  wifiPassword = "";
+  preferences.putString("ssid", "");
+  preferences.putString("password", "");
+  WiFi.disconnect();
+  wifiAttempted = false;
+  wifiWasConnected = false;
+  clockSyncAttempted = false;
+  Serial.println("Wi-Fi apagado pelo botao BOOT; credencial do LifeGuard mantida. Rede LIFEGUARD disponivel para reconfiguracao.");
+}
+
 void setup() {
   Serial.begin(115200);
+  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
   if (!isConfigured(LIFEGUARD_ROOT_CA)) {
     Serial.println("Preencha LIFEGUARD_ROOT_CA em config.h antes de gravar.");
     while (true) delay(1000);
@@ -296,6 +328,7 @@ void setup() {
 void loop() {
   if (setupActive) setupServer.handleClient();
   updatePulse();
+  checkBootButton();
   connectWifi();
   if (WiFi.status() == WL_CONNECTED && !wifiWasConnected) {
     wifiWasConnected = true;

@@ -58,6 +58,7 @@ export type PatientChange = {
 };
 
 export function mapElder(elder: ApiElder): Elder {
+  const temperature = elder.ultimaLeitura?.temperatura;
   return {
     id: elder.id,
     vinculoId: elder.vinculoId,
@@ -69,7 +70,9 @@ export function mapElder(elder: ApiElder): Elder {
     status: elder.status,
     // Mantém a última medida válida visível mesmo quando o sinal atual caiu.
     batimento: elder.ultimaLeitura?.valida ? elder.ultimaLeitura.batimento : null,
-    temperatura: elder.ultimaLeitura?.valida ? elder.ultimaLeitura.temperatura : null,
+    temperatura: temperature !== null && temperature !== undefined && temperature >= 30 && temperature <= 45
+      ? temperature
+      : null,
     ultimaAtualizacao: elder.ultimaLeitura ? formatDateTime(elder.ultimaLeitura.horario) : 'nenhum registro',
   };
 }

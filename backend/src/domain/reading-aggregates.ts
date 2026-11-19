@@ -30,7 +30,8 @@ export function aggregateReadingsByInterval(readings: TimedReading[], intervalMs
     .map(([start, samples]) => {
       const validSamples = samples.filter((reading) => reading.valid);
       const hearts = validSamples.flatMap((reading) => reading.heartRate === null ? [] : [reading.heartRate]);
-      const temperatures = validSamples.flatMap((reading) => reading.temperature === null ? [] : [reading.temperature]);
+      const temperatures = samples.flatMap((reading) =>
+        reading.temperature !== null && reading.temperature >= 30 && reading.temperature <= 45 ? [reading.temperature] : []);
       const average = (values: number[]) => values.length ? values.reduce((total, value) => total + value, 0) / values.length : null;
       return {
         timestamp: new Date(start),

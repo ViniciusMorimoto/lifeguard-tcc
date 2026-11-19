@@ -1,17 +1,19 @@
-# ESP32 — contrato de integração (11/10/2026)
+# LifeGuard — contrato de integração (11/10/2026)
 
 ## Estado
 
 Implementação no código; conferir registro de implantação antes de usar em produção.
 Não grava firmware, não faz Bluetooth e não valida a precisão dos sensores.
 
-1. Paciente entra no APK: Meu dispositivo → Preparar meu ESP32.
-2. Escolhe nome e confirma. O servidor revoga o dispositivo anterior e gera credencial
-   aleatória, exibida uma vez. O banco guarda somente SHA-256 do segredo.
+1. Paciente entra no app: Meu dispositivo → Preparar dispositivo.
+2. O servidor registra o único dispositivo ativo do paciente com o nome fixo
+   `LifeGuard` e gera credencial aleatória, exibida uma vez. O banco guarda somente
+   SHA-256 do segredo.
 3. Transfere manualmente a credencial para configuração local do firmware (fora do Git).
-4. ESP32 conecta ao Wi-Fi, sincroniza UTC via NTP e envia uma leitura a cada 5 segundos.
+4. LifeGuard conecta ao Wi-Fi, sincroniza UTC via NTP e envia uma leitura a cada 5 segundos.
 5. A tela consulta o servidor; não apresenta mais conexão ou pareamento simulados.
-6. O paciente mantém apenas um dispositivo ativo. Para trocar, desconecte o atual antes de configurar outro.
+6. O paciente mantém apenas um dispositivo ativo. Para trocar o Wi-Fi, reconfigure o
+   LifeGuard sem revogar a credencial; para substituir o equipamento, desconecte o atual.
 
 Não colocar senha da conta, token de usuário, banco ou segredo JWT no firmware.
 A credencial do hardware serve APENAS para enviar leituras do paciente proprietário.
@@ -21,7 +23,7 @@ A credencial do hardware serve APENAS para enviar leituras do paciente propriet�
 `POST https://152-67-44-170.sslip.io/api/dispositivos/leituras`
 
 Headers: `Content-Type: application/json` e `Authorization: Bearer <credencial>`.
-Validar certificado TLS no ESP32; **não usar setInsecure()**.
+Validar certificado TLS no firmware; **não usar setInsecure()**.
 
 ```json
 {
@@ -49,12 +51,16 @@ contato físico confiavelmente se o firmware mentir ou o sensor não o detectar.
 - 5xx/timeout: repetir MESMO UUID e MESMO corpo com espera progressiva.
 
 Sem contato, sinal ruim/desconhecido, ausência de medidas ou valores fora da faixa
-técnica (30–250 bpm; 30–45 °C) são registrados como inválidos, com medidas nulas.
+técnica (30–250 bpm; 30–45 °C) impedem a amostra de ser considerada válida para
+monitoramento. Cada sensor é filtrado separadamente: uma temperatura dentro da faixa
+continua registrada e pode ser exibida mesmo sem contato do sensor de pulso; nesse caso,
+o estado geral permanece `sem_sinal`. Valores de temperatura fora da faixa são nulos,
+sem descartar um batimento válido.
 Esses números são filtros técnicos do protótipo, não limites clínicos recomendados.
 Temperatura deve ser corporal: sensor ambiente não equivale a medição corporal.
 O histórico apresenta médias, picos e mínimos por hora; o gráfico mostra os últimos
-cinco minutos em pontos médios de dez segundos. Sem nova medida válida, o visor mantém
-o último valor e seu horário.
+cinco minutos em pontos médios de dez segundos. O visor mantém a última temperatura
+técnica válida e seu horário, independentemente do contato do sensor de pulso.
 
 ## Alertas e conexão
 
@@ -68,9 +74,12 @@ o último valor e seu horário.
   Destinatários: apenas cuidadores com vínculo ativo e preferências habilitadas.
   Entrega push depende de rede/provedor: retentativa após resposta perdida pode
   duplicar entrega; não é garantia de entrega única nem sistema de emergência.
-- Sem leitura recente por 90 s: `sem_sinal`; home mantém os últimos valores válidos e
+- Sem leitura recente por 90 s: `sem_sinal`; home mantém os últimos valores mensuráveis e
   informa o horário do último registro. Meu dispositivo considera último contato,
   não a validade da medida.
+- O ponto de acesso para configuração se chama `LIFEGUARD`. Para reconfigurar o Wi-Fi,
+  mantenha o botão BOOT pressionado por 3 segundos quando o firmware tiver suspendido
+  o modo de configuração; a credencial do LifeGuard é mantida.
 - Revogação preserva histórico e impede novos envios; gerar outra credencial troca
   o dispositivo somente depois de desconectar o atual. Não requer apagar dados do paciente.
 
@@ -78,7 +87,8 @@ o último valor e seu horário.
 
 - Aplicar migration `20261011000100_device_ingestion` na VM após backup.
 - Validar integração com PostgreSQL descartável no CI; não simular saúde de pessoas reais.
-- Publicar OTA somente depois da API atualizada. Não há mudança nativa nesta etapa.
+- Publicar o firmware atualizado e a API antes de distribuir o app, pois o nome do ponto
+  de acesso mudou para `LIFEGUARD`. A tela também informa como reabrir a configuração.
 - Confirmar fluxo em dois celulares e credencial inválida/revogada.
 - Confirmar modelo da placa, sensor cardíaco, sensor de temperatura, pinagem e firmware
   atual antes de escrever/gravar código no hardware. Ainda não foi conectado/testado.

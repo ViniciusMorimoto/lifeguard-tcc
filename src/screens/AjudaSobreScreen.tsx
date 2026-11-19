@@ -18,7 +18,7 @@ const questions = [
   ['Quem pode ver as informações do paciente?', 'O próprio paciente e os cuidadores que ele autorizou por meio de um código de vínculo válido. O vínculo pode ser removido a qualquer momento.'],
   ['O aplicativo funciona sem internet?', 'Ele abre e preserva a sessão, mas cadastro, vínculos, atualização de dados e informações vindas do servidor precisam de conexão.'],
   ['Por que uma notificação pode não chegar?', 'O cuidador precisa estar vinculado, permitir notificações no Android e ter conexão. Modos de economia de bateria também podem atrasar a entrega.'],
-  ['Preciso deixar o computador ligado?', 'Não. O APK acessa a API hospedada na Oracle e funciona sem Expo Go, cabo USB ou npm start.'],
+  ['Preciso deixar o computador ligado?', 'Não. Basta manter o LifeGuard ligado e conectado ao Wi-Fi.'],
 ] as const;
 
 export default function AjudaSobreScreen({ navigation }: Props) {

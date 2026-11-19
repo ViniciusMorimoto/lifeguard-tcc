@@ -25,12 +25,25 @@ test('device: schema refuses user id, source spoofing and non-numeric readings',
   assert.equal(deviceSampleSchema.safeParse({ ...sample, heartRate: 250 }).success, true);
 });
 test('device: no contact / poor quality / impossible values never become valid measurements', () => {
-  for (const extra of [{ contactDetected: false }, { signalQuality: 'POOR' as const }, { heartRate: 290 }, { temperature: 70 }, { heartRate: null, temperature: null }]) {
+  for (const extra of [{ contactDetected: false, temperature: null }, { signalQuality: 'POOR' as const, temperature: null }, { heartRate: 290, temperature: null }, { heartRate: null, temperature: 70 }, { heartRate: null, temperature: null }]) {
     const normalized = normalizeDeviceSample({ ...sample, ...extra });
     assert.equal(normalized.valid, false);
     assert.equal(normalized.heartRate, null);
-    assert.equal(normalized.temperature, null);
   }
+  assert.equal(normalizeDeviceSample({ ...sample, heartRate: null, temperature: 70 }).temperature, null);
+});
+test('device: temperature remains available when pulse contact is absent', () => {
+  const normalized = normalizeDeviceSample({ ...sample, temperature: 32.19, contactDetected: false, signalQuality: 'NO_CONTACT' });
+  assert.equal(normalized.valid, true);
+  assert.equal(normalized.heartRate, null);
+  assert.equal(normalized.temperature, 32.19);
+  assert.equal(normalized.invalidReason, null);
+});
+test('device: an invalid temperature does not discard an otherwise valid heart rate', () => {
+  const normalized = normalizeDeviceSample({ ...sample, temperature: 70 });
+  assert.equal(normalized.valid, true);
+  assert.equal(normalized.heartRate, 75);
+  assert.equal(normalized.temperature, null);
 });
 test('device: only three same-direction samples over sufficient time confirm a violation', () => {
   assert.equal(sustainedState(rows([140, 140]), limits, 'HEART_RATE'), null);
@@ -60,4 +73,12 @@ test('reading history: groups 10-second samples and preserves average, minimum, 
   assert.equal(buckets[0]!.temperatureAverage, 36.7);
   assert.equal(buckets[1]!.sampleCount, 0);
   assert.equal(buckets[1]!.heartRateAverage, null);
+});
+
+test('history keeps temperature when the pulse detector has no contact', () => {
+  const [bucket] = aggregateReadingsByInterval([
+    { timestamp: new Date(), valid: false, heartRate: null, temperature: 36.4 },
+  ], 10_000);
+  assert.equal(bucket?.temperatureAverage, 36.4);
+  assert.equal(bucket?.heartRateAverage, null);
 });

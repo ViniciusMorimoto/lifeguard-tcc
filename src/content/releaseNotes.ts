@@ -1,7 +1,7 @@
 export const releaseNotes = {
   edition: 'Outubro de 2026',
   items: [
-    'Meu dispositivo consulta o servidor e prepara uma credencial exclusiva para o ESP32.',
+    'Você pode conectar o LifeGuard pela tela Meu dispositivo.',
     'Histórico responsivo para paciente e cuidador, sem gráfico ultrapassando o cartão.',
     'Ícones próprios em traço para batimentos, temperatura, histórico, dispositivo, cuidadores, limites e SOS.',
     'Elementos gráficos originais da marca nos cartões de batimentos, cuidadores, limites e SOS.',

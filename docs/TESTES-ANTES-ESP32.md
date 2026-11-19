@@ -1,4 +1,4 @@
-# Verificação antes de conectar o ESP32
+# Verificação antes de conectar o LifeGuard
 
 ## Testes automatizados
 
@@ -53,12 +53,13 @@ Use contas de teste e registre versão do APK, modelo do aparelho e resultado.
 - Configurar homologação remota separada; o banco descartável local/CI não a substitui.
 - Domínio próprio depende de escolha/registro; sslip.io permanece em uso.
 
-## Pareamento do ESP32
+## Pareamento do LifeGuard
 
-1. Gravar `firmware/esp32_lifeguard/esp32_lifeguard.ino` no ESP32 e configurar o certificado da API conforme o README do firmware.
-2. No APK Android 10 ou superior, tocar em **Conectar ao LIFEGUARD-ESP32** e aceitar o pedido de conexão do Android. Em aparelhos mais antigos, abrir as configurações de Wi-Fi, conectar manualmente à rede `LIFEGUARD-ESP32` e voltar ao app. A rede do ESP32 não tem internet; isso é esperado e não impede a configuração.
-3. Repetir em **Bluetooth (BLE)**, conceder acesso a dispositivos próximos, encontrar `LIFEGUARD-ESP32` e enviar a mesma configuração.
-4. Após enviar a configuração, o ESP32 reinicia. Observar o Monitor Serial em 115200 baud: confirmar `Wi-Fi conectado` com IP, `Relógio sincronizado` e resposta `Leitura enviada (200/201)`. Se ficar sem sinal, usar essas mensagens para identificar se parou na associação ao Wi-Fi, no NTP ou na resposta da API. A conexão do telefone ao AP apenas configura o dispositivo; as leituras chegam ao servidor pela conexão Wi-Fi configurada no ESP32.
-5. Testar negação de permissões, ESP32 desligado, senha inválida e tentativa de alterar a rede. O app deve mostrar erro acionável e permitir tentar novamente.
+1. Gravar `firmware/esp32_lifeguard/esp32_lifeguard.ino` no dispositivo e configurar o certificado da API conforme o README do firmware.
+2. No APK Android 10 ou superior, tocar em **Conectar ao LIFEGUARD** e aceitar o pedido de conexão do Android. Em aparelhos mais antigos, abrir as configurações de Wi-Fi, conectar manualmente à rede `LIFEGUARD` e voltar ao app. A rede não tem internet; isso é esperado e não impede a configuração.
+3. Repetir em **Bluetooth (BLE)**, conceder acesso a dispositivos próximos, encontrar `LIFEGUARD` e enviar a mesma configuração. O app e o servidor devem sempre identificar o dispositivo como **LifeGuard**, sem permitir outro nome; cada paciente pode manter apenas um ativo.
+4. Após enviar a configuração, o firmware reinicia. Observar o Monitor Serial em 115200 baud: confirmar `Wi-Fi conectado` com IP, `Relógio sincronizado` e resposta `Leitura enviada (200/201)`. Se ficar sem sinal, usar essas mensagens para identificar se parou na associação ao Wi-Fi, no NTP ou na resposta da API. A conexão do telefone ao AP apenas configura o dispositivo; as leituras chegam ao servidor pela conexão Wi-Fi configurada.
+5. Testar negação de permissões, dispositivo desligado, senha inválida e tentativa de alterar a rede. Se `LIFEGUARD` não aparecer, manter o botão BOOT pressionado por três segundos para reabrir a configuração sem apagar a credencial. O app deve mostrar erro acionável e permitir tentar novamente.
+6. Confirmar que a temperatura aparece mesmo sem contato do sensor de pulso e que o estado geral permanece `sem_sinal` enquanto não houver pulso válido.
 
 Esse fluxo ainda depende de teste com hardware real. Não usar dados simulados como medições reais nem como validação clínica.
